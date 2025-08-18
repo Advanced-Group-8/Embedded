@@ -1,0 +1,11 @@
+# .github/workflows/issue-workflow.yml
+on:
+  issues:
+    types: [opened, edited, closed]
+
+jobs:
+  example:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print issue title
+        run: echo "${{ github.event.issue.title }}"
