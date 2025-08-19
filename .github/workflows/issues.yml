@@ -1,4 +1,4 @@
-name: Lint Code Base
+name: Build and Test C++ Code
 
 on:
   push:
@@ -7,21 +7,20 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
+  build-and-run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: write   # gör att Super-Linter kan rapportera resultat
 
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # viktigt för att slippa "shallow repo"-fel
 
-      - name: Run Super-Linter
-        uses: super-linter/super-linter@v6
-        env:
-          DEFAULT_BRANCH: main
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VALIDATE_ALL_CODEBASE: true   # kör på hela koden
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Build C++ code
+        run: |
+          mkdir -p build
+          g++ -std=c++17 -Wall -Wextra -o build/main *.cpp
+
+      - name: Run executable
+        run: ./build/main
