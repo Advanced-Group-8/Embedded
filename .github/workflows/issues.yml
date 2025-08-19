@@ -20,7 +20,7 @@ jobs:
       - name: Build C++ code
         run: |
           mkdir -p build
-          g++ -std=c++17 -Wall -Wextra -o build/main *.cpp
+          g++ -std=c++17 -Wall -Wextra -o build/main src/*.cpp
 
       - name: Run executable
         run: ./build/main
