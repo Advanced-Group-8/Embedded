@@ -1,20 +1,27 @@
-name: Lint code base
+name: Lint Code Base
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-jobs: 
-  build: 
+jobs:
+  lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write   # gör att Super-Linter kan rapportera resultat
 
     steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-    
+          fetch-depth: 0   # viktigt för att slippa "shallow repo"-fel
+
       - name: Run Super-Linter
         uses: super-linter/super-linter@v6
-        env: 
-          VALIDATE_ALL_CODEBASE: true
+        env:
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_ALL_CODEBASE: true   # kör på hela koden
