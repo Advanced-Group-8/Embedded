@@ -1,17 +1,18 @@
+name: Lint code base
 
-
-on: push
+on: [push, pull_request]
 
 jobs: 
-  super-lint:
-    name: Lint code base
+  build: 
     runs-on: ubuntu-latest
-    steps: 
-      - name: Checkout code
-        uses: actions/checkout@v2
 
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+    
       - name: Run Super-Linter
-        uses: github/super-linter@v3
+        uses: super-linter/super-linter@v6
         env: 
+          VALIDATE_ALL_CODEBASE: true
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
