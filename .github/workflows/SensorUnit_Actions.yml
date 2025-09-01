@@ -33,4 +33,4 @@ jobs:
 
       - name: Run cppcheck static analysis
         run: |
-          platformio check --project-dir SensorUnit || true
+          platformio check -v --project-dir SensorUnit || true
