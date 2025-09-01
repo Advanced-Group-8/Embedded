@@ -6,7 +6,7 @@ constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
 constexpr char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 
 // MQTT Broker settings
-constexpr char MQTT_BROKER[] = "YOUR_MQTT_BROKER_IP";
-constexpr uint16_t MQTT_PORT = 1883;
+constexpr char MQTT_BROKER[] = "MQTT_BROKER_IP";
+constexpr unsigned int MQTT_PORT = 1883;
 
 #endif // ARDUINO_SECRET_H
