@@ -8,7 +8,6 @@
 #include "arduino_secrets.h"
 #include "device_info.h"
 
-#define SerialAT Serial1
 constexpr bool debugOn = true;
 constexpr int DHT11_PIN = 4;
 constexpr int GMT_OFFSET_PLUS_2 = 7200;
