@@ -2,9 +2,9 @@ name: PlatformIO CI Build
 
 on:
   push:
-    branches: [ main, SensorUnit_dev ]
+    branches: [main, SensorUnit_dev]
   pull_request:
-    branches: [ main, SensorUnit_dev ]
+    branches: [main, SensorUnit_dev]
 
 jobs:
   build:
@@ -16,12 +16,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
           pip install platformio
+
+      - name: Copy arduino_secrets_template.h to arduino_secrets.h
+        run: cp SensorUnit/src/arduino_secrets_template.h SensorUnit/src/arduino_secrets.h
 
       - name: Build SensorUnit firmware
         run: |
