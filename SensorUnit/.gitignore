@@ -4,4 +4,3 @@
 .vscode/launch.json
 .vscode/ipch
 */arduino_secrets.h
-SensorUnit/src/arduino_secrets.h
