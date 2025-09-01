@@ -33,4 +33,4 @@ jobs:
 
       - name: Run cppcheck static analysis
         run: |
-          platformio check --project-dir SensorUnit --skip-packages --suppress=preprocessorErrorDirective:*/ArduinoJson/* || true
+          platformio check --project-dir SensorUnit || true
