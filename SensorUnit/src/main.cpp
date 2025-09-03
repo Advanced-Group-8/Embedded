@@ -2,7 +2,7 @@
 #include <WiFiS3.h>
 #include <time.h>
 #include <ArduinoJson.h>
-#include <PubSubClient.h>
+#include <PubSubClientQoS2.h>
 #include <NTPClient.h>
 #include "DHT11.h"
 #include "arduino_secrets.h"
@@ -19,18 +19,18 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", GMT_OFFSET_PLUS_2, 60000);
 
 void setupWiFi();
+void callback(char *topic, uint8_t *payload, unsigned int length);
 void setupMQTTClient();
 void setupNTP();
-void reconnectMQTT();
+void connectMQTT();
 void getTimestamp(char *buffer, size_t len);
-void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID);
+void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID);
 
 void setup()
 {
     Serial.begin(115200);
     dht11.begin();
     setupWiFi();
-    ntpUDP.begin(2390);
     setupNTP();
     initDeviceInfo();
     setupMQTTClient();
@@ -38,59 +38,57 @@ void setup()
 
 void loop()
 {
-    StaticJsonDocument<128> doc;
-    char timestamp[25];
-    getTimestamp(timestamp, sizeof(timestamp));
-
     if (!mqttClient.connected())
     {
         if (debugOn)
             Serial.println(F("[Loop] MQTT not connected, reconnecting..."));
-        reconnectMQTT();
+        connectMQTT();
+        delay(5000);
     }
     mqttClient.loop();
 
-    float temperature = dht11.getTemperature();
-    float humidity = dht11.getHumidity();
-    if (debugOn)
+    static unsigned long lastPublish = 0;
+    const unsigned long publishInterval = 15000;
+    if (millis() - lastPublish >= publishInterval)
     {
-        Serial.print(F("[Loop] Temperature: "));
-        Serial.println(temperature);
-        Serial.print(F("[Loop] Humidity: "));
-        Serial.println(humidity);
-    }
+        StaticJsonDocument<256> doc;
+        char timestamp[25];
+        getTimestamp(timestamp, sizeof(timestamp));
+        float temperature = dht11.getTemperature();
+        float humidity = dht11.getHumidity();
 
-    createSensorData(doc, temperature, humidity, timestamp, getDeviceID());
-    char payload[128];
-    serializeJsonPretty(doc, payload);
-    if (debugOn)
-    {
-        Serial.print(F("[Loop] Payload: "));
-        Serial.println(payload);
+        createSensorData(doc, temperature, humidity, timestamp, getDeviceID());
+        char payload[256];
+        serializeJsonPretty(doc, payload);
+        for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
+        {
+            if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
+            {
+                if (debugOn)
+                {
+                    Serial.print(F("Published to "));
+                    Serial.print(getMqttTopic());
+                    Serial.print(F(" with QoS "));
+                    Serial.print(qos);
+                    Serial.print(F(": \n"));
+                    Serial.println(payload);
+                }
+            }
+            else
+            {
+                if (debugOn)
+                {
+                    Serial.print(F("Publish failed with QoS "));
+                    Serial.print(qos);
+                    Serial.println();
+                    Serial.print(F("MQTT state: "));
+                    Serial.println(mqttClient.state());
+                }
+            }
+        }
+        lastPublish = millis();
     }
-
-    if (debugOn)
-        Serial.println(F("[Loop] Publishing to MQTT..."));
-    bool published = mqttClient.publish(getMqttTopic(), payload);
-    if (debugOn && published)
-    {
-        Serial.print(F("Published to "));
-        Serial.print(getMqttTopic());
-        Serial.print(F(": "));
-        Serial.println(payload);
-    }
-    else if (debugOn && !published)
-    {
-        Serial.println(F("Publish failed"));
-    }
-
-    unsigned long now = millis();
-    while (millis() - now < 1000)
-    {
-        mqttClient.loop();
-        delay(10);
-    }
-    delay(20000);
+    delay(100);
 }
 
 void setupMQTTClient()
@@ -98,7 +96,7 @@ void setupMQTTClient()
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setKeepAlive(60);
     mqttClient.setSocketTimeout(60);
-    mqttClient.setBufferSize(128); // 256 default
+    mqttClient.setBufferSize(256);
 }
 
 void setupWiFi()
@@ -116,7 +114,6 @@ void setupWiFi()
         }
     }
 
-    // While developing for debug connectivity issues
     if (debugOn)
     {
         Serial.println(F("\nWiFi connected!"));
@@ -127,6 +124,7 @@ void setupWiFi()
 
 void setupNTP()
 {
+    ntpUDP.begin(2390);
     timeClient.begin();
     while (!timeClient.update())
     {
@@ -156,7 +154,7 @@ void getTimestamp(char *buffer, size_t len)
              timeinfo.tm_sec);
 }
 
-void reconnectMQTT()
+void connectMQTT()
 {
     static unsigned long lastDisconnectTime = 0;
     static uint8_t retryCount = 0;
@@ -165,7 +163,15 @@ void reconnectMQTT()
         unsigned long currentTime = millis();
         if (currentTime - lastDisconnectTime >= (5000UL << retryCount))
         {
-            if (mqttClient.connect(getDeviceID()))
+            {
+                if (debugOn)
+                {
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "Connecting to %s:%d", MQTT_BROKER, MQTT_PORT);
+                    Serial.println(buf);
+                }
+            }
+            if (mqttClient.connect(getDeviceID(), false))
             {
                 retryCount = 0;
                 if (debugOn)
@@ -185,24 +191,24 @@ void reconnectMQTT()
     }
 }
 
-void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID)
+void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID)
 {
     doc.clear();
     if (isnan(temperature))
     {
-        doc["temperature"] = serialized("null");
+        doc["Temperature"] = serialized("null");
     }
     else
     {
-        doc["temperature"] = temperature;
+        doc["Temperature"] = temperature;
     }
     if (isnan(humidity))
     {
-        doc["humidity"] = serialized("null");
+        doc["Humidity"] = serialized("null");
     }
     else
     {
-        doc["humidity"] = humidity;
+        doc["Humidity"] = humidity;
     }
-    doc["timestamp"] = timestamp;
+    doc["Timestamp"] = timestamp;
 }
