@@ -5,8 +5,9 @@
 #include <PubSubClientQoS2.h>
 #include <NTPClient.h>
 #include "DHT11.h"
-#include "arduino_secrets.h"
+#include "arduino_secrets_template.h"
 #include "device_info.h"
+#include "eeprom_logging.h"
 
 constexpr bool debugOn = true;
 constexpr int DHT11_PIN = 4;
@@ -30,13 +31,170 @@ void setup()
 {
     Serial.begin(115200);
     dht11.begin();
-    setupWiFi();
-    setupNTP();
-    initDeviceInfo();
-    setupMQTTClient();
+    //setupWiFi();
+    //setupNTP();
+    //initDeviceInfo();
+    //setupMQTTClient();
+
+    randomSeed(analogRead(A0));
+    delay(10000);
 }
 
+//First test-loop
 void loop()
+{
+    uint8_t randomTemperature = random(0, 31);
+    delay(100);
+    uint8_t randomHumidity = random(9, 101);
+
+    // First I start the program with "testStep = 0". After I see everything works as intended I cut the power for the device,
+    // and declare "testStep = 3" before I run the program again to ensure the previus data is still stored on the EEPROM
+    static uint8_t testStep = 3; 
+
+    char payloadBuffer[Elog::RECORD_SIZE]{};
+    char readBuffer[Elog::RECORD_SIZE];
+
+    if(testStep == 0)
+    {
+        StaticJsonDocument<256> doc;
+        char timeStamp[25];
+        snprintf(timeStamp, sizeof timeStamp, "TEST-%lu", millis());
+        createSensorData(doc, randomTemperature, randomHumidity, timeStamp, "DEV");
+
+        uint32_t sequence = Elog::getAndIncrementSequence();
+        doc["seq"] = sequence;
+        doc["buffered"] = true;
+        serializeJson(doc, payloadBuffer, Elog::MAXJSON_CHARS);
+
+        Elog::enqueuePayload(payloadBuffer);
+        uint16_t newest = (Elog::getWriteIndex() + Elog::CAPACITY - 1) % Elog::CAPACITY;
+        delay(1000);
+
+        Serial.println("----------------------------------");
+        Serial.print(F("[#1] wrote slot ")); Serial.println(newest);
+        Serial.print(F("Read Index = ")); Serial.print(Elog::getReadIndex());
+        Serial.print(F("Write Index = ")); Serial.print(Elog::getWriteIndex());
+        Serial.print(F("Count Index = ")); Serial.println(Elog::getQueueCount());
+        Serial.println("----------------------------------");
+
+        delay(1000);
+        testStep = 1;
+    }
+    else if(testStep == 1)
+    {
+        StaticJsonDocument<256> doc;
+        char timeStamp[25];
+        snprintf(timeStamp, sizeof timeStamp, "TEST-%lu", millis());
+        createSensorData(doc, randomTemperature, randomHumidity, timeStamp, "DEV");
+
+        uint32_t sequence = Elog::getAndIncrementSequence();
+        doc["seq"] = sequence;
+        doc["buffered"] = true;
+        serializeJson(doc, payloadBuffer, Elog::MAXJSON_CHARS);
+
+        Elog::enqueuePayload(payloadBuffer);
+        uint16_t newest = (Elog::getWriteIndex() + Elog::CAPACITY - 1) % Elog::CAPACITY;
+        uint16_t prev1  = (Elog::getWriteIndex() + Elog::CAPACITY - 2) % Elog::CAPACITY;
+        delay(1000);
+
+        Serial.println();
+        Serial.print(F("[#2] wrote slot ")); Serial.println(newest);
+        Serial.println("----------------------------------");
+
+        Elog::readFromEeprom(newest, readBuffer);
+        Serial.print(F("   This slot ")); Serial.print(newest); Serial.print(F(": "));
+        Serial.println(readBuffer);
+        Serial.println("----------------------------------");
+        Serial.println();
+
+        Elog::readFromEeprom(prev1, readBuffer);
+        Serial.print(F("   previous slot ")); Serial.print(prev1); Serial.print(F(": "));
+        Serial.println(readBuffer);
+        Serial.println("----------------------------------");
+        Serial.println();
+
+        delay(1000);
+        testStep = 2;
+    }
+    else if(testStep == 2)
+    {
+        StaticJsonDocument<256> doc;
+        char timeStamp[25];
+        snprintf(timeStamp, sizeof timeStamp, "TEST-%lu", millis());
+        createSensorData(doc, randomTemperature, randomHumidity, timeStamp, "DEV");
+
+        uint32_t sequence = Elog::getAndIncrementSequence();
+        doc["seq"] = sequence;
+        doc["buffered"] = true;
+        serializeJson(doc, payloadBuffer, Elog::MAXJSON_CHARS);
+
+        Elog::enqueuePayload(payloadBuffer);
+        uint16_t newest = (Elog::getWriteIndex() + Elog::CAPACITY - 1) % Elog::CAPACITY;
+        uint16_t prev1  = (Elog::getWriteIndex() + Elog::CAPACITY - 2) % Elog::CAPACITY;
+        uint16_t prev2  = (Elog::getWriteIndex() + Elog::CAPACITY - 3) % Elog::CAPACITY;
+        delay(1000);
+
+        Serial.println();
+        Serial.print(F("[#3] wrote slot ")); Serial.println(newest);
+        Serial.println("----------------------------------");
+        
+        Elog::readFromEeprom(newest, readBuffer);
+        Serial.print(F("   This slot ")); Serial.print(newest); Serial.print(F(": "));
+        Serial.println(readBuffer);
+        Serial.println("----------------------------------");
+
+        Elog::readFromEeprom(prev1, readBuffer);
+        Serial.print(F("   previous slot ")); Serial.print(prev1); Serial.print(F(": "));
+        Serial.println(readBuffer);
+        Serial.println("----------------------------------");
+
+        Elog::readFromEeprom(prev2, readBuffer);
+        Serial.print(F("   previous slot ")); Serial.print(prev2); Serial.print(F(": "));
+        Serial.println(readBuffer);
+
+        Serial.println("----------------------------------");
+        Serial.print(F("Read Index = ")); Serial.print(Elog::getReadIndex());
+        Serial.print(F("Write Index = ")); Serial.print(Elog::getWriteIndex());
+        Serial.print(F("Count Index = ")); Serial.println(Elog::getQueueCount());
+        Serial.println("----------------------------------");
+        Serial.println();
+
+        delay(1000);
+        testStep = 3;
+    }
+    else if (testStep == 3)
+    {
+        //Read ring-buffer metadata from EEPROM (little-endian u16 values).
+        uint16_t writeIndexE = (uint16_t)EEPROM.read(Elog::WRITE_INDEX_ADDRESS)
+                            | (uint16_t)(EEPROM.read(Elog::WRITE_INDEX_ADDRESS + 1) << 8);
+        uint16_t countE      = (uint16_t)EEPROM.read(Elog::COUNT_ADDRESS)
+                            | (uint16_t)(EEPROM.read(Elog::COUNT_ADDRESS + 1) << 8);
+
+        uint16_t howMany = (countE < 3) ? countE : 3;
+        if (howMany == 0) {
+            Serial.println(F("[dump] queue is empty"));
+            delay(2000);
+            return;
+        }
+
+        // Decide how many records to show on boot.
+        // Show up to 3, but never more than what is currently stored in the queue.
+        uint16_t start = (writeIndexE + Elog::CAPACITY - howMany) % Elog::CAPACITY;
+
+        for (uint16_t k = 0; k < howMany; ++k)
+        {
+            uint16_t idx = (start + k) % Elog::CAPACITY;
+            Elog::readFromEeprom(idx, readBuffer);
+            Serial.print(F("[dump] slot ")); Serial.print(idx); Serial.print(F(": "));
+            Serial.println(readBuffer);
+            Serial.println("----------------------------------");
+        }
+        Serial.println(F("Test complete"));
+        delay(2000);
+    }
+}
+
+/*void loop()
 {
     if (!mqttClient.connected())
     {
@@ -89,7 +247,7 @@ void loop()
         lastPublish = millis();
     }
     delay(100);
-}
+}*/
 
 void setupMQTTClient()
 {
