@@ -1,0 +1,27 @@
+# PlatformIO
+.pio/
+.ccls-cache/
+.clangd/
+
+# VS Code
+.vscode/
+
+# Build artifacts
+*.elf
+*.bin
+*.hex
+*.map
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Secrets
+arduino_secrets_template.h
+arduino_secrets.h
+secrets*.h
+*.env
