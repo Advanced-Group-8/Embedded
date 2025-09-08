@@ -2,9 +2,9 @@ name: PlatformIO CI Build
 
 on:
   push:
-    branches: [main, SensorUnit_dev]
+    branches: [main, SensorUnit_dev, development]
   pull_request:
-    branches: [main, SensorUnit_dev]
+    branches: [main, SensorUnit_dev, development]
 
 jobs:
   build:

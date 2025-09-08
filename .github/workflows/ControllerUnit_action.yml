@@ -2,9 +2,9 @@ name: PlatformIO CI Build - ControllerUnit
 
 on:
   push:
-    branches: [main, ControllerUnit_dev]
+    branches: [main, ControllerUnit_dev, development]
   pull_request:
-    branches: [main, ControllerUnit_dev]
+    branches: [main, ControllerUnit_dev, development]
 
 jobs:
   build-controllerunit:
