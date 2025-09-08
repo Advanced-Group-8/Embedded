@@ -18,19 +18,19 @@ PubSubClient mqttClient(client);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", GMT_OFFSET_PLUS_2, 60000);
 
-void setupWiFi();
+void connectWiFi();
 void callback(char *topic, uint8_t *payload, unsigned int length);
 void setupMQTTClient();
 void setupNTP();
 void connectMQTT();
 void getTimestamp(char *buffer, size_t len);
-void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID);
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID);
 
 void setup()
 {
     Serial.begin(115200);
     dht11.begin();
-    setupWiFi();
+    connectWiFi();
     setupNTP();
     initDeviceInfo();
     setupMQTTClient();
@@ -38,6 +38,11 @@ void setup()
 
 void loop()
 {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        connectWiFi();
+    }
+
     if (!mqttClient.connected())
     {
         if (debugOn)
@@ -51,14 +56,14 @@ void loop()
     const unsigned long publishInterval = 15000;
     if (millis() - lastPublish >= publishInterval)
     {
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<128> doc;
         char timestamp[25];
         getTimestamp(timestamp, sizeof(timestamp));
         float temperature = dht11.getTemperature();
         float humidity = dht11.getHumidity();
 
         createSensorData(doc, temperature, humidity, timestamp, getDeviceID());
-        char payload[256];
+        char payload[128];
         serializeJsonPretty(doc, payload);
         for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
         {
@@ -99,22 +104,25 @@ void setupMQTTClient()
     mqttClient.setBufferSize(256);
 }
 
-void setupWiFi()
+void connectWiFi()
 {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    uint8_t retry = 0;
-    while (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED)
     {
-        delay(500);
-        retry++;
-        if (retry > 40)
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        uint8_t retry = 0;
+        while (WiFi.status() != WL_CONNECTED)
         {
-            delay(2000);
-            NVIC_SystemReset();
+            delay(500);
+            retry++;
+            if (retry > 40)
+            {
+                delay(2000);
+                NVIC_SystemReset();
+            }
         }
     }
 
-    if (debugOn)
+    if (debugOn && WiFi.status() == WL_CONNECTED)
     {
         Serial.println(F("\nWiFi connected!"));
         Serial.print(F("IP address: "));
@@ -191,7 +199,7 @@ void connectMQTT()
     }
 }
 
-void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID)
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID)
 {
     doc.clear();
     if (isnan(temperature))
