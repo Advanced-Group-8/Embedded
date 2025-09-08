@@ -1,12 +1,12 @@
-#ifndef ARDUINO_SECRETS_TEMPLATE_H
-#define ARDUINO_SECRETS_TEMPLATE_H
+#ifndef ARDUINO_SECRET_H
+#define ARDUINO_SECRET_H
 
 // WiFi settings
-constexpr char WIFI_SSID[] = "Tele2_90ED16";
-constexpr char WIFI_PASSWORD[] = "wqx42qeb";
+constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
+constexpr char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 
 // MQTT Broker settings
-constexpr char MQTT_BROKER[] = "192.168.0.31";
+constexpr char MQTT_BROKER[] = "MQTT_BROKER_IP";
 constexpr unsigned int MQTT_PORT = 1883;
 
 #endif // ARDUINO_SECRET_H
