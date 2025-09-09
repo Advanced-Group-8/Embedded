@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-controllerunit:
-    name: Build and Check ControllerUnit
+    name: PlatformIO Build and Check - ControllerUnit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
