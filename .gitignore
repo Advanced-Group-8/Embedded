@@ -25,3 +25,4 @@ arduino_secrets_template.h
 arduino_secrets.h
 secrets*.h
 *.env
+SensorUnit/src/arduino_secrets_template.h
