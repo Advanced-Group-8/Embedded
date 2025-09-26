@@ -3,6 +3,7 @@
 
 #include "sMQTTMessage.h"
 #include <map>
+#include <unordered_map>
 
 class sMQTTBroker;
 
@@ -42,6 +43,26 @@ public:
 
 	std::map<uint16_t, sMQTTMessage> inflight;
 
+	struct PendingQoS2
+	{
+		std::string topic;
+		std::string payload;
+		bool retain;
+		unsigned char qos;
+		unsigned long storedAt;
+	};
+	std::unordered_map<uint16_t, PendingQoS2> pendingQos2;
+
+	// QoS2 housekeeping parameters
+#ifndef SMQTT_DEFAULT_QOS2_TIMEOUT_MS
+#define SMQTT_DEFAULT_QOS2_TIMEOUT_MS 15000UL
+#endif
+	static constexpr size_t PENDING_QOS2_MAX = 10; // max simultaneous QoS2 in-flight per client
+
+	// Runtime configurable QoS2 timeout (initialized to macro default)
+	void setQoS2Timeout(unsigned long ms) { qos2TimeoutMs = ms; }
+	unsigned long getQoS2Timeout() const { return qos2TimeoutMs; }
+
 private:
 	void processMessage();
 	void updateLiveStatus();
@@ -55,6 +76,7 @@ private:
 	sMQTTBroker *_parent;
 	TCPClient _client;
 	sMQTTMessage message;
+	unsigned long qos2TimeoutMs = SMQTT_DEFAULT_QOS2_TIMEOUT_MS;
 };
 
 typedef std::vector<sMQTTClient *> sMQTTClientList;
