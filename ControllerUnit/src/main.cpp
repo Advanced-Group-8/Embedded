@@ -4,17 +4,14 @@
 #include "sMQTTBroker_User.h"
 #include "arduino_secrets.h"
 
-// Forward declarations
 void printMessageBuffer();
 void checkForNewMessages();
 
-// Global objects
 sMQTTBroker_User broker;
 
-// Message buffer management
 static std::vector<String> messageBuffer;
 static constexpr size_t MAX_BUFFER_SIZE = 50;
-static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60000; // 1 minute
+static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60000; // Print buffer every 60 seconds
 
 void setup()
 {
