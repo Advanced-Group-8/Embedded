@@ -56,7 +56,7 @@ void sMQTTBroker::update()
 
 			delete c;
 			clit = clients.erase(clit);
-			SMQTT_LOGD("Clients %d", clients.size());
+			SMQTT_LOGD("Clients %d\n", clients.size());
 			if (clit == clients.end())
 				break;
 			clit--;
