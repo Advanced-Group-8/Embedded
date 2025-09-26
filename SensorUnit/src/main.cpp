@@ -24,7 +24,7 @@ void setupMQTTClient();
 void setupNTP();
 void connectMQTT();
 void getTimestamp(char *buffer, size_t len);
-void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID);
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, /*const char *timestamp,*/ const char *deviceID);
 
 void setup()
 {
@@ -51,16 +51,16 @@ void loop()
     const unsigned long publishInterval = 15000;
     if (millis() - lastPublish >= publishInterval)
     {
-        StaticJsonDocument<256> doc;
-        char timestamp[25];
-        getTimestamp(timestamp, sizeof(timestamp));
+        StaticJsonDocument<128> doc;
+        // char timestamp[25];
+        // getTimestamp(timestamp, sizeof(timestamp));
         float temperature = dht11.getTemperature();
         float humidity = dht11.getHumidity();
 
-        createSensorData(doc, temperature, humidity, timestamp, getDeviceID());
-        char payload[256];
+        createSensorData(doc, temperature, humidity, /*timestamp,*/ getDeviceID());
+        char payload[128];
         serializeJsonPretty(doc, payload);
-        for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
+        for (uint8_t qos = QOS1; qos <= QOS1; ++qos)
         {
             if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
             {
@@ -88,7 +88,7 @@ void loop()
         }
         lastPublish = millis();
     }
-    delay(100);
+    delay(500);
 }
 
 void setupMQTTClient()
@@ -96,7 +96,7 @@ void setupMQTTClient()
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setKeepAlive(60);
     mqttClient.setSocketTimeout(60);
-    mqttClient.setBufferSize(256);
+    mqttClient.setBufferSize(128);
 }
 
 void setupWiFi()
@@ -191,7 +191,7 @@ void connectMQTT()
     }
 }
 
-void createSensorData(StaticJsonDocument<256> &doc, float temperature, float humidity, const char *timestamp, const char *deviceID)
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, /*const char *timestamp,*/ const char *deviceID)
 {
     doc.clear();
     if (isnan(temperature))
@@ -210,5 +210,5 @@ void createSensorData(StaticJsonDocument<256> &doc, float temperature, float hum
     {
         doc["Humidity"] = humidity;
     }
-    doc["Timestamp"] = timestamp;
+    // doc["Timestamp"] = timestamp;
 }
