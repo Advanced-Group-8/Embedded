@@ -4,10 +4,17 @@
 #include "sMQTTBroker_User.h"
 #include "arduino_secrets.h"
 
+// Forward declarations
 void printMessageBuffer();
+void checkForNewMessages();
 
+// Global objects
 sMQTTBroker_User broker;
+
+// Message buffer management
 static std::vector<String> messageBuffer;
+static constexpr size_t MAX_BUFFER_SIZE = 50;
+static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60000; // 1 minute
 
 void setup()
 {
@@ -21,44 +28,13 @@ void setup()
     Serial.println("Connection established!");
     Serial.print("IP address:\t");
     Serial.println(WiFi.localIP());
-
     broker.init(MQTT_PORT);
 }
 
 void loop()
 {
     broker.update();
-
-    static char prevPayload[256] = {0};
-    const char *currentPayload = broker.getLastPayload(); // Get the current payload
-
-    // Check if the payload has changed
-    if (strcmp(prevPayload, currentPayload) != 0)
-    {
-        Serial.print("New payload received: ");
-        Serial.println(currentPayload);
-        strncpy(prevPayload, currentPayload, sizeof(prevPayload) - 1); // Copy current payload to previous payload
-        prevPayload[sizeof(prevPayload) - 1] = '\0';
-
-        // Store the new message in the buffer if it's changed
-        messageBuffer.push_back(String(currentPayload));
-    }
-
-    // Limit the buffer size
-    const size_t MAX_BUFFER_SIZE = 50;
-    if (messageBuffer.size() > MAX_BUFFER_SIZE)
-    {
-        messageBuffer.erase(messageBuffer.begin()); // Remove oldest when buffer exceeds max size
-    }
-
-    // Print the buffer every 1 minute
-    static unsigned long lastPrint = 0;
-    if (millis() - lastPrint >= 60000)
-    {
-        printMessageBuffer();
-        lastPrint = millis();
-    }
-
+    checkForNewMessages();
     delay(1000);
 }
 
@@ -81,4 +57,44 @@ void printMessageBuffer()
         Serial.println(messageBuffer[i]);
     }
     Serial.println("--- End of Buffer ---\n");
+}
+
+void addMessageToBuffer(const String &message)
+{
+    messageBuffer.push_back(message);
+
+    // Limit the buffer size
+    if (messageBuffer.size() > MAX_BUFFER_SIZE)
+    {
+        messageBuffer.erase(messageBuffer.begin()); // Remove oldest message
+    }
+}
+
+void checkForNewMessages()
+{
+    static char prevPayload[256] = {0};
+    static unsigned long lastBufferPrint = 0;
+
+    const char *currentPayload = broker.getLastPayload();
+
+    // Check if we have a new message (payload changed)
+    if (currentPayload[0] != '\0' && strcmp(prevPayload, currentPayload) != 0)
+    {
+        Serial.print("New payload received: ");
+        Serial.println(currentPayload);
+
+        // Update previous payload
+        strncpy(prevPayload, currentPayload, sizeof(prevPayload) - 1);
+        prevPayload[sizeof(prevPayload) - 1] = '\0';
+
+        // Add to buffer
+        addMessageToBuffer(String(currentPayload));
+    }
+
+    // Print buffer periodically
+    if (millis() - lastBufferPrint >= BUFFER_PRINT_INTERVAL)
+    {
+        printMessageBuffer();
+        lastBufferPrint = millis();
+    }
 }
