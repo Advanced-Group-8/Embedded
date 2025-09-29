@@ -25,7 +25,7 @@ void sMQTTBroker::update()
 	TCPClient client = _server->available();
 	if (client)
 	{
-		SMQTT_LOGD("New Client");
+		SMQTT_LOGD("New Client\n");
 		sMQTTClient *sClient = new sMQTTClient(this, client);
 		clients.push_back(sClient);
 	}
@@ -112,7 +112,7 @@ void sMQTTBroker::unsubscribe(sMQTTClient *client, const char *topic)
 
 void sMQTTBroker::publish(sMQTTClient *client, sMQTTTopic *topic, sMQTTMessage *msg)
 {
-	SMQTT_LOGD("Broker::publish QoS=%d topic=%s",
+	SMQTT_LOGD("Broker::publish QoS=%d Topic=%s",
 			   msg ? msg->QoS() : -1,
 			   topic ? topic->Name() : "(null)");
 
@@ -124,11 +124,11 @@ void sMQTTBroker::publish(sMQTTClient *client, sMQTTTopic *topic, sMQTTMessage *
 	if (msg && client && msg->QoS() == 1)
 	{
 		uint16_t msgId = msg->getMessageId();
-		SMQTT_LOGD("PUBACK: Received PUBLISH with msgId=%u\n", msgId);
+		SMQTT_LOGD("PUBACK: Received PUBLISH with msgID=%u\n", msgId);
 		uint8_t puback[4] = {0x40, 0x02,
 							 static_cast<uint8_t>(msgId >> 8),
 							 static_cast<uint8_t>(msgId & 0xFF)};
-		SMQTT_LOGD("PUBACK: Sending PUBACK with msgId=%u (bytes: 0x%02X 0x%02X)\n", msgId, puback[2], puback[3]);
+		SMQTT_LOGD("PUBACK: Sending PUBACK with msgID=%u (bytes: 0x%02X 0x%02X)\n", msgId, puback[2], puback[3]);
 		client->write(reinterpret_cast<const char *>(puback), sizeof(puback));
 		client->flushSocket();
 	}
@@ -231,9 +231,9 @@ void sMQTTBroker::findRetainTopic(sMQTTTopic *topic, sMQTTClient *client)
 	{
 		if (topic->match((*it)->Name()))
 		{
-			SMQTT_LOGD("findRetainTopic %s qos:%d",
+			SMQTT_LOGD("FindRetainTopic %s QoS:%d",
 					   (*it)->Name(), (*it)->QoS());
-			SMQTT_LOGD("findRetainTopic %s", (*it)->Payload());
+			SMQTT_LOGD("FindRetainTopic %s", (*it)->Payload());
 			sMQTTMessage msg(sMQTTMessage::Type::Publish, (*it)->QoS() << 1);
 			msg.add((*it)->Name(), strlen((*it)->Name()));
 			if ((*it)->QoS())
@@ -258,7 +258,7 @@ bool sMQTTBroker::isClientConnected(sMQTTClient *client)
 			return false;
 		if (c->getClientId() == client->getClientId())
 		{
-			SMQTT_LOGD("found:%s client size:%d",
+			SMQTT_LOGD("Found:%s client size:%d",
 					   client->getClientId().c_str(), clients.size());
 			return true;
 		}
@@ -284,7 +284,7 @@ void sMQTTBroker::publish(const std::string &topic,
 		if ((*sub)->match(topic))
 		{
 			sMQTTClientList subList = (*sub)->getSubscribeList();
-			SMQTT_LOGD("topic %s Clients %d",
+			SMQTT_LOGD("Topic %s Clients %d",
 					   topic.c_str(), subList.size());
 
 			for (auto cl : subList)
