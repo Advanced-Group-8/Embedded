@@ -5,6 +5,10 @@
 constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
 constexpr char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 
+// AP WiFi settings
+constexpr char AP_WIFI_SSID[] = "YOUR_AP_WIFI_SSID";
+constexpr char AP_WIFI_PASSWORD[] = "YOUR_AP_WIFI_PASSWORD";
+
 // MQTT Broker settings
 constexpr char MQTT_BROKER[] = "MQTT_BROKER_IP";
 constexpr unsigned int MQTT_PORT = 1883;
