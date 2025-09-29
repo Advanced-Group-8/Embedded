@@ -1,43 +1,40 @@
 #include <Arduino.h>
 #include <WiFiS3.h>
-#include <time.h>
 #include <ArduinoJson.h>
 #include <PubSubClientQoS2.h>
-#include <NTPClient.h>
 #include "DHT11.h"
 #include "arduino_secrets.h"
 #include "device_info.h"
 
 constexpr bool debugOn = true;
 constexpr int DHT11_PIN = 4;
-constexpr int GMT_OFFSET_PLUS_2 = 7200;
+constexpr unsigned long publishInterval = 5000;
 
 DHT11 dht11(DHT11_PIN);
 WiFiClient client;
 PubSubClient mqttClient(client);
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", GMT_OFFSET_PLUS_2, 60000);
 
-void setupWiFi();
-void callback(char *topic, uint8_t *payload, unsigned int length);
+void connectWiFi();
 void setupMQTTClient();
-void setupNTP();
 void connectMQTT();
-void getTimestamp(char *buffer, size_t len);
-void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, /*const char *timestamp,*/ const char *deviceID);
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID);
 
 void setup()
 {
     Serial.begin(115200);
     dht11.begin();
-    setupWiFi();
-    setupNTP();
+    connectWiFi();
     initDeviceInfo();
     setupMQTTClient();
 }
 
 void loop()
 {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        connectWiFi();
+    }
+
     if (!mqttClient.connected())
     {
         if (debugOn)
@@ -48,16 +45,14 @@ void loop()
     mqttClient.loop();
 
     static unsigned long lastPublish = 0;
-    const unsigned long publishInterval = 15000;
     if (millis() - lastPublish >= publishInterval)
     {
         StaticJsonDocument<128> doc;
-        // char timestamp[25];
-        // getTimestamp(timestamp, sizeof(timestamp));
         float temperature = dht11.getTemperature();
         float humidity = dht11.getHumidity();
 
-        createSensorData(doc, temperature, humidity, /*timestamp,*/ getDeviceID());
+        createSensorData(doc, temperature, humidity, getDeviceID());
+
         char payload[128];
         serializeJsonPretty(doc, payload);
         for (uint8_t qos = QOS1; qos <= QOS1; ++qos)
@@ -99,59 +94,30 @@ void setupMQTTClient()
     mqttClient.setBufferSize(128);
 }
 
-void setupWiFi()
+void connectWiFi()
 {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    uint8_t retry = 0;
-    while (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED)
     {
-        delay(500);
-        retry++;
-        if (retry > 40)
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        uint8_t retry = 0;
+        while (WiFi.status() != WL_CONNECTED)
         {
-            delay(2000);
-            NVIC_SystemReset();
+            delay(500);
+            retry++;
+            if (retry > 40)
+            {
+                delay(2000);
+                NVIC_SystemReset();
+            }
         }
     }
 
-    if (debugOn)
+    if (debugOn && WiFi.status() == WL_CONNECTED)
     {
         Serial.println(F("\nWiFi connected!"));
         Serial.print(F("IP address: "));
         Serial.println(WiFi.localIP());
     }
-}
-
-void setupNTP()
-{
-    ntpUDP.begin(2390);
-    timeClient.begin();
-    while (!timeClient.update())
-    {
-        delay(100);
-    }
-}
-
-void getTimestamp(char *buffer, size_t len)
-{
-    if (!timeClient.update())
-    {
-        timeClient.forceUpdate();
-    }
-    time_t rawTime = timeClient.getEpochTime();
-    struct tm timeinfo;
-    struct tm *tmptr = gmtime(&rawTime);
-    if (tmptr)
-    {
-        timeinfo = *tmptr;
-    }
-    snprintf(buffer, len, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-             timeinfo.tm_year + 1900,
-             timeinfo.tm_mon + 1,
-             timeinfo.tm_mday,
-             timeinfo.tm_hour,
-             timeinfo.tm_min,
-             timeinfo.tm_sec);
 }
 
 void connectMQTT()
@@ -191,7 +157,7 @@ void connectMQTT()
     }
 }
 
-void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, /*const char *timestamp,*/ const char *deviceID)
+void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID)
 {
     doc.clear();
     if (isnan(temperature))
@@ -210,5 +176,4 @@ void createSensorData(StaticJsonDocument<128> &doc, float temperature, float hum
     {
         doc["Humidity"] = humidity;
     }
-    // doc["Timestamp"] = timestamp;
 }

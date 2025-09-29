@@ -24,8 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install platformio
 
-      - name: Copy arduino_secrets_template.h to arduino_secrets.h
-        run: cp SensorUnit/src/arduino_secrets_template.h SensorUnit/src/arduino_secrets.h
+      - name: Copy arduino_secrets_template.h to arduino_secrets.h (if exists)
+        run: |
+          if [ -f SensorUnit/src/arduino_secrets_template.h ]; then cp SensorUnit/src/arduino_secrets_template.h SensorUnit/src/arduino_secrets.h; fi
 
       - name: Build SensorUnit firmware
         run: |
