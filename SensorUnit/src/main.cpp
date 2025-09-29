@@ -14,7 +14,7 @@ DHT11 dht11(DHT11_PIN);
 WiFiClient client;
 PubSubClient mqttClient(client);
 
-void setupWiFi();
+void connectWiFi();
 void setupMQTTClient();
 void connectMQTT();
 void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID);
@@ -23,7 +23,7 @@ void setup()
 {
     Serial.begin(115200);
     dht11.begin();
-    setupWiFi();
+    connectWiFi();
     initDeviceInfo();
     setupMQTTClient();
 }
