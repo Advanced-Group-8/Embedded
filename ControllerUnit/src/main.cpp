@@ -4,27 +4,25 @@
 #include "sMQTTBroker_User.h"
 #include "arduino_secrets.h"
 
+#define LOG_MESSAGE(...) Serial.printf(__VA_ARGS__)
+#define Seconds *1000
+static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60 Seconds;      // Print buffer every 60 seconds
+static constexpr unsigned long FREE_MEMORY_PRINT_INTERVAL = 30 Seconds; // Print free memory every 30 seconds
+
+void startNetworkingInterfaces();
 void printMessageBuffer();
 void checkForNewMessages();
+void printFreeMemory();
 
 sMQTTBroker_User broker;
-
 static std::vector<String> messageBuffer;
-static constexpr size_t MAX_BUFFER_SIZE = 50;
-static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60000; // Print buffer every 60 seconds
+static constexpr size_t MAX_BUFFER_SIZE = 100;
 
 void setup()
 {
     Serial.begin(115200);
     delay(5000);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(1000);
-    }
-    Serial.println("Connection established!");
-    Serial.print("IP address:\t");
-    Serial.println(WiFi.localIP());
+    startNetworkingInterfaces();
     broker.init(MQTT_PORT);
 }
 
@@ -32,28 +30,23 @@ void loop()
 {
     broker.update();
     checkForNewMessages();
+    static unsigned long lastFreeMemoryPrint = 0;
+    if (millis() - lastFreeMemoryPrint >= FREE_MEMORY_PRINT_INTERVAL)
+    {
+        printFreeMemory();
+        lastFreeMemoryPrint = millis();
+    }
     delay(1000);
 }
 
-/*
-Steps:
-In your sMQTTBroker_User class, add a member variable for lastMsgId (e.g., uint16_t lastMsgId = 0;).
-In your onEvent handler, when you receive a publish event, extract the msgId and store it in lastMsgId.
-Add a getter: uint16_t getLastMsgId() const { return lastMsgId; }
-In your main loop, keep a static prevMsgId and compare it to broker.getLastMsgId(). If it changes, you know a new message arrived, even if the payload is the same.
-*/
-
 void printMessageBuffer()
 {
-    Serial.println("\n--- Message Buffer Dump ---");
+    LOG_MESSAGE("\n--- Message Buffer Dump ---\n");
     for (size_t i = 0; i < messageBuffer.size(); ++i)
     {
-        Serial.print("[");
-        Serial.print(i);
-        Serial.print("] ");
-        Serial.println(messageBuffer[i]);
+        LOG_MESSAGE("[%zu] %s\n", i + 1, messageBuffer[i].c_str());
     }
-    Serial.println("--- End of Buffer ---\n");
+    LOG_MESSAGE("--- End of Buffer ---\n");
 }
 
 void addMessageToBuffer(const String &message)
@@ -77,8 +70,7 @@ void checkForNewMessages()
     // Check if we have a new message (payload changed)
     if (currentPayload[0] != '\0' && strcmp(prevPayload, currentPayload) != 0)
     {
-        Serial.print("New payload received: ");
-        Serial.println(currentPayload);
+        LOG_MESSAGE("New payload received:\n%s\n", currentPayload);
 
         // Update previous payload
         strncpy(prevPayload, currentPayload, sizeof(prevPayload) - 1);
@@ -94,4 +86,28 @@ void checkForNewMessages()
         printMessageBuffer();
         lastBufferPrint = millis();
     }
+}
+
+void printFreeMemory()
+{
+    size_t freeMem = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    LOG_MESSAGE("Free Memory: %zu Bytes.\n", freeMem);
+}
+
+void startNetworkingInterfaces()
+{
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(1000);
+    }
+    LOG_MESSAGE("Connection established!\nIP address: %s\n", WiFi.localIP().toString().c_str());
+
+    IPAddress AP_IP(192, 168, 10, 1);
+    IPAddress AP_Subnet(255, 255, 255, 0);
+    IPAddress LEASE_START(192, 168, 10, 2);
+    WiFi.softAPConfig(AP_IP, AP_IP, AP_Subnet);
+    WiFi.softAP(AP_WIFI_SSID, AP_WIFI_PASSWORD, 1, 1, 20, false);
+    LOG_MESSAGE("AP started!\nAP IP address: %s\n", WiFi.softAPIP().toString().c_str());
 }
