@@ -20,6 +20,9 @@ private:
     long lastTst = 0;
     bool haveGPS = false;
 
+    static std::vector<String> messageBuffer;
+    static constexpr size_t MAX_BUFFER_SIZE = 50;
+
     // Simple resend queue for failed backend posts
     std::vector<String> resendQueue;
     static constexpr size_t MAX_QUEUE = 20;
@@ -32,11 +35,12 @@ private:
     bool isGpsTopic(const std::string &topic) const;
     void handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson);
     void handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson);
-    void enrichWithGpsAndTimestamp(ArduinoJson::JsonDocument &doc) const;
+    void addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const;
     void ensureTimeInitialized();
     String currentIsoTimestamp() const;
     bool postToBackend(const String &body);
     void flushResendQueue();
+    void handleMessageBuffer(const std::string &payload);
 };
 
 #endif // SMQTTBROKER_USER_H

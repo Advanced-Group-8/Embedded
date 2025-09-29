@@ -1,4 +1,3 @@
-// Handles incoming publish events: clearly separates GPS updates vs Sensor posts
 #include "sMQTTBroker_User.h"
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -17,10 +16,7 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
 
     SMQTT_LOGD("Received topic: %s\n", topic.c_str());
     SMQTT_LOGD("Payload: %s\n", payload.c_str());
-
-    // Always keep last payload for main.cpp
-    strncpy(this->lastReceivedPayload, payload.c_str(), sizeof(this->lastReceivedPayload) - 1);
-    this->lastReceivedPayload[sizeof(this->lastReceivedPayload) - 1] = '\0';
+    // handleMessageBuffer(payload);
 
     // Parse JSON if applicable
     JsonDocument doc;
@@ -45,12 +41,12 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
 
 bool sMQTTBroker_User::isSensorsTopic(const std::string &topic) const
 {
-    return topic.rfind("sensors/", 0) == 0;
+    return topic.rfind("sensors/") == 0;
 }
 
 bool sMQTTBroker_User::isGpsTopic(const std::string &topic) const
 {
-    return topic.rfind("owntracks/", 0) == 0;
+    return topic.rfind("owntracks/") == 0;
 }
 
 void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson)
@@ -80,8 +76,8 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
     String body;
     if (isJson)
     {
-        enrichWithGpsAndTimestamp(doc);
-        SMQTT_LOGD("Enriched with gps+timestamp\n");
+        addGpsDataAndTimestamp(doc);
+        SMQTT_LOGD("Appending GPS data and timestamp\n");
         // Build body
         JsonDocument out;
         out["topic"] = topic.c_str();
@@ -98,6 +94,10 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
         serializeJsonPretty(out, body);
     }
 
+    memset(lastReceivedPayload, 0, sizeof(lastReceivedPayload));
+    strncpy(lastReceivedPayload, body.c_str(), sizeof(lastReceivedPayload) - 1);
+    lastReceivedPayload[sizeof(lastReceivedPayload) - 1] = '\0';
+
     if (!postToBackend(body))
     {
         if (resendQueue.size() < MAX_QUEUE)
@@ -105,7 +105,7 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
     }
 }
 
-void sMQTTBroker_User::enrichWithGpsAndTimestamp(ArduinoJson::JsonDocument &doc) const
+void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
 {
     if (haveGPS)
     {
@@ -186,3 +186,17 @@ void sMQTTBroker_User::flushResendQueue()
         }
     }
 }
+
+// void sMQTTBroker_User::handleMessageBuffer(const std::string &payload)
+// {
+//     // Add to buffer if new
+//     if (messageBuffer.empty() || messageBuffer.back() != payload.c_str())
+//     {
+//         messageBuffer.push_back(payload.c_str());
+//         if (messageBuffer.size() > MAX_BUFFER_SIZE)
+//         {
+//             messageBuffer.erase(messageBuffer.begin());
+//         }
+//         SMQTT_LOGD("New payload buffered: %s\n", payload.c_str());
+//     }
+// }
