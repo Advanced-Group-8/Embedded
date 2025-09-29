@@ -55,7 +55,7 @@ public:
 
 	// QoS2 housekeeping parameters
 #ifndef SMQTT_DEFAULT_QOS2_TIMEOUT_MS
-#define SMQTT_DEFAULT_QOS2_TIMEOUT_MS 15000UL
+#define SMQTT_DEFAULT_QOS2_TIMEOUT_MS 30000UL
 #endif
 	static constexpr size_t PENDING_QOS2_MAX = 10; // max simultaneous QoS2 in-flight per client
 

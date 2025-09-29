@@ -4,7 +4,7 @@ sMQTTClient::sMQTTClient(sMQTTBroker *parent, TCPClient &client)
 	: mqtt_connected(false), _parent(parent)
 {
 	_client = client;
-	keepAlive = 25;
+	keepAlive = 30;
 	updateLiveStatus();
 };
 
@@ -208,7 +208,20 @@ void sMQTTClient::processMessage()
 
 	case sMQTTMessage::Type::PubComp:
 	{
-		// QoS2 finalization
+		if (header)
+		{
+			uint16_t msgId = (static_cast<uint8_t>(header[0]) << 8) | static_cast<uint8_t>(header[1]);
+			auto it = inflight.find(msgId);
+			if (it != inflight.end())
+			{
+				SMQTT_LOGD("Client: Received PUBCOMP for msgId=%u, removing inflight QoS2\n", msgId);
+				inflight.erase(it);
+			}
+			else
+			{
+				SMQTT_LOGD("Client: PUBCOMP for unknown msgId=%u\n", msgId);
+			}
+		}
 	}
 	break;
 
