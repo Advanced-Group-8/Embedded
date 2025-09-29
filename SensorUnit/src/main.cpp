@@ -52,9 +52,10 @@ void loop()
         float humidity = dht11.getHumidity();
 
         createSensorData(doc, temperature, humidity, getDeviceID());
+
         char payload[128];
         serializeJsonPretty(doc, payload);
-        for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
+        for (uint8_t qos = QOS1; qos <= QOS1; ++qos)
         {
             if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
             {
@@ -82,7 +83,7 @@ void loop()
         }
         lastPublish = millis();
     }
-    delay(100);
+    delay(500);
 }
 
 void setupMQTTClient()
@@ -90,7 +91,7 @@ void setupMQTTClient()
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setKeepAlive(60);
     mqttClient.setSocketTimeout(60);
-    mqttClient.setBufferSize(256);
+    mqttClient.setBufferSize(128);
 }
 
 void connectWiFi()
