@@ -1,4 +1,4 @@
-name: PlatformIO CI Build
+name: PlatformIO CI Build - SensorUnit
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [main, ControllerUnit_dev, SensorUnit_dev]
 
 jobs:
-  build:
-    name: PlatformIO Build and Check
+  build-sensorunit:
+    name: PlatformIO Build and Check - SensorUnit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
