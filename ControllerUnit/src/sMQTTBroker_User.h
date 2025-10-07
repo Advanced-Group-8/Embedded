@@ -4,43 +4,53 @@
 #include "sMQTTBroker.h"
 #include "sMQTTEvent.h"
 #include <Arduino.h>
+#include <WiFi.h>
 #include <vector>
+#include <ctime>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include "arduino_secrets.h"
 
 class sMQTTBroker_User : public sMQTTBroker
 {
 public:
+    struct messageEntry
+    {
+        String topic;
+        String payload;
+        u16_t msgID;
+    };
     bool onEvent(sMQTTEvent *event) override;
-    const char *getLastPayload() const { return lastReceivedPayload; }
+    const std::vector<messageEntry> &getMessageBuffer() const { return messageBuffer; }
 
 private:
-    char lastReceivedPayload[512] = {0};
     double lastLat = 0.0;
     double lastLon = 0.0;
     long lastTst = 0;
     bool haveGPS = false;
 
-    static std::vector<String> messageBuffer;
-    static constexpr size_t MAX_BUFFER_SIZE = 50;
+    // Internal message buffer
+    std::vector<messageEntry> messageBuffer;
+    static constexpr size_t MAX_BUFFER_SIZE = 1000;
 
     // Simple resend queue for failed backend posts
     std::vector<String> resendQueue;
-    static constexpr size_t MAX_QUEUE = 20;
+    static constexpr size_t MAX_QUEUE = 1000;
 
     // Time/NTP
     bool timeInitialized = false;
 
-    // Helpers for clarity and separation of concerns
     bool isSensorsTopic(const std::string &topic) const;
     bool isGpsTopic(const std::string &topic) const;
-    void handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson);
-    void handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson);
+    void handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc);
+    void handleSensorMessage(const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc);
+    String constructJson(String &body, const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc);
     void addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const;
     void ensureTimeInitialized();
     String currentIsoTimestamp() const;
     bool postToBackend(const String &body);
     void flushResendQueue();
-    void handleMessageBuffer(const std::string &payload);
+    void handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID);
 };
 
 #endif // SMQTTBROKER_USER_H

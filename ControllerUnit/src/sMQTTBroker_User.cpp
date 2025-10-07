@@ -1,9 +1,4 @@
 #include "sMQTTBroker_User.h"
-#include <ArduinoJson.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include "arduino_secrets.h"
-#include <ctime>
 
 bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
 {
@@ -13,28 +8,32 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     auto *pubEvent = static_cast<sMQTTPublicClientEvent *>(event);
     const std::string &topic = pubEvent->Topic();
     const std::string &payload = pubEvent->Payload();
+    uint16_t msgID = pubEvent->MsgID();
 
     SMQTT_LOGD("Received topic: %s\n", topic.c_str());
     SMQTT_LOGD("Payload: %s\n", payload.c_str());
-    // handleMessageBuffer(payload);
+    SMQTT_LOGD("Message ID: %u\n", msgID);
+    handleMessageBuffer(topic, payload, msgID);
 
     // Parse JSON if applicable
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     bool isJson = !err;
     if (!isJson)
+    {
         SMQTT_LOGD("JSON parse failed: %s\n", err.c_str());
-
-    // Check type and dispatch
-    if (isGpsTopic(topic))
-    {
-        handleGpsMessage(topic, payload, doc, isJson);
     }
-    else if (isSensorsTopic(topic))
+    else // Check type and dispatch
     {
-        handleSensorMessage(topic, payload, doc, isJson);
+        if (isGpsTopic(topic))
+        {
+            handleGpsMessage(topic, payload, doc);
+        }
+        else if (isSensorsTopic(topic))
+        {
+            handleSensorMessage(topic, payload, msgID, doc);
+        }
     }
-
     flushResendQueue();
     return true;
 }
@@ -49,13 +48,8 @@ bool sMQTTBroker_User::isGpsTopic(const std::string &topic) const
     return topic.rfind("owntracks/") == 0;
 }
 
-void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson)
+void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
-    if (!isJson)
-    {
-        SMQTT_LOGD("GPS message is not JSON; ignoring\n");
-        return;
-    }
     if (doc["lat"].is<double>() && doc["lon"].is<double>())
     {
         lastLat = doc["lat"].as<double>();
@@ -70,33 +64,13 @@ void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::str
     }
 }
 
-void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc, bool isJson)
+void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc)
 {
     SMQTT_LOGD("Sensor payload received for topic %s\n", topic.c_str());
     String body;
-    if (isJson)
-    {
-        addGpsDataAndTimestamp(doc);
-        SMQTT_LOGD("Appending GPS data and timestamp\n");
-        // Build body
-        JsonDocument out;
-        out["topic"] = topic.c_str();
-        out["controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
-        out["payload"] = doc;
-        serializeJsonPretty(out, body);
-    }
-    else
-    {
-        JsonDocument out;
-        out["topic"] = topic.c_str();
-        out["controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
-        out["payload"] = payload.c_str();
-        serializeJsonPretty(out, body);
-    }
-
-    memset(lastReceivedPayload, 0, sizeof(lastReceivedPayload));
-    strncpy(lastReceivedPayload, body.c_str(), sizeof(lastReceivedPayload) - 1);
-    lastReceivedPayload[sizeof(lastReceivedPayload) - 1] = '\0';
+    addGpsDataAndTimestamp(doc);
+    SMQTT_LOGD("Appending GPS data and timestamp\n");
+    body = constructJson(body, topic, payload, msgID, doc);
 
     if (!postToBackend(body))
     {
@@ -105,22 +79,32 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
     }
 }
 
+String sMQTTBroker_User::constructJson(String &body, const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc)
+{
+    JsonDocument out;
+    out["topic"] = topic.c_str();
+    out["controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
+    doc["message_id"] = msgID;
+    out["payload"] = doc;
+    serializeJsonPretty(out, body);
+    return body;
+}
+
 void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
 {
     if (haveGPS)
     {
-        JsonObject gps = doc["gps"].to<JsonObject>();
-        gps["lat"] = lastLat;
-        gps["lon"] = lastLon;
+        doc["gps"]["latitude"] = lastLat;
+        doc["gps"]["longitude"] = lastLon;
     }
-    doc["Timestamp"] = currentIsoTimestamp();
+    doc["timestamp"] = currentIsoTimestamp();
 }
 
 void sMQTTBroker_User::ensureTimeInitialized()
 {
     if (timeInitialized)
         return;
-    configTzTime("pool.ntp.org", "time.nist.gov");
+    configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.nist.gov");
     timeInitialized = true;
 }
 
@@ -129,9 +113,9 @@ String sMQTTBroker_User::currentIsoTimestamp() const
     time_t now;
     time(&now);
     struct tm tmInfo;
-    gmtime_r(&now, &tmInfo);
+    localtime_r(&now, &tmInfo);
     char buf[25];
-    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
              tmInfo.tm_year + 1900,
              tmInfo.tm_mon + 1,
              tmInfo.tm_mday,
@@ -170,33 +154,25 @@ void sMQTTBroker_User::flushResendQueue()
 {
     if (!WiFi.isConnected() || resendQueue.empty())
         return;
-    SMQTT_LOGD("Flushing resend queue (%d items)\n", (int)resendQueue.size());
-    // Try to send up to N items per loop to avoid long blocking
+    SMQTT_LOGD("Attempting to resend queue (%d items in total).\n", static_cast<int>(resendQueue.size()));
     size_t toSend = min(resendQueue.size(), (size_t)3);
     for (size_t i = 0; i < toSend; ++i)
     {
         String body = resendQueue.front();
-        resendQueue.erase(resendQueue.begin());
-        if (!postToBackend(body))
+        if (postToBackend(body))
         {
-            // put back at end if still failing
-            if (resendQueue.size() < MAX_QUEUE)
-                resendQueue.push_back(body);
-            break;
+            SMQTT_LOGD("Resend successful! Removing:\n'%s'\n from queue.\n", resendQueue.begin()->c_str());
+            resendQueue.erase(resendQueue.begin());
         }
     }
 }
 
-// void sMQTTBroker_User::handleMessageBuffer(const std::string &payload)
-// {
-//     // Add to buffer if new
-//     if (messageBuffer.empty() || messageBuffer.back() != payload.c_str())
-//     {
-//         messageBuffer.push_back(payload.c_str());
-//         if (messageBuffer.size() > MAX_BUFFER_SIZE)
-//         {
-//             messageBuffer.erase(messageBuffer.begin());
-//         }
-//         SMQTT_LOGD("New payload buffered: %s\n", payload.c_str());
-//     }
-// }
+void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
+{
+    messageBuffer.push_back({String(topic.c_str()), String(payload.c_str()), msgID});
+    if (messageBuffer.size() > MAX_BUFFER_SIZE)
+    {
+        messageBuffer.erase(messageBuffer.begin());
+    }
+    SMQTT_LOGD("New payload buffered:\n %s\n", payload.c_str());
+}
