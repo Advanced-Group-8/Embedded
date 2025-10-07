@@ -116,7 +116,7 @@ void sMQTTBroker::publish(sMQTTClient *client, sMQTTTopic *topic, sMQTTMessage *
 			   msg ? msg->QoS() : -1,
 			   topic ? topic->Name() : "(null)");
 
-	sMQTTPublicClientEvent event(client, std::string(topic->Name()));
+	sMQTTPublicClientEvent event(client, std::string(topic->Name()), msg);
 	if (topic->Payload())
 		event.setPayload(std::string(topic->Payload()));
 	onEvent(&event);

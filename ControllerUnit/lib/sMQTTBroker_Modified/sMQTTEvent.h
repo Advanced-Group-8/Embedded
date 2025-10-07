@@ -2,6 +2,7 @@
 #define SMQTTEVENT_FILE
 
 #include <string>
+#include "sMQTTMessage.h"
 
 /*! Enum for event*/
 enum sMQTTEventType
@@ -13,6 +14,7 @@ enum sMQTTEventType
 	Subscribe_sMQTTEventType,	 //< client subscribe to topic
 	UnSubscribe_sMQTTEventType	 //< client unsubscribe from topic
 };
+
 class sMQTTEvent
 {
 public:
@@ -26,7 +28,10 @@ public:
 protected:
 	unsigned char _type;
 };
+
 class sMQTTClient;
+class sMQTTMessage;
+
 /*! Connect new client event*/
 class sMQTTNewClientEvent : public sMQTTEvent
 {
@@ -49,6 +54,7 @@ private:
 	sMQTTClient *_client;
 	std::string login, password;
 };
+
 class sMQTTRemoveClientEvent : public sMQTTEvent
 {
 public:
@@ -58,25 +64,30 @@ public:
 private:
 	sMQTTClient *_client;
 };
+
 class sMQTTLostConnectionEvent : public sMQTTEvent
 {
 public:
 	sMQTTLostConnectionEvent();
 };
+
 class sMQTTPublicClientEvent : public sMQTTEvent
 {
 public:
-	sMQTTPublicClientEvent(sMQTTClient *client, const std::string &topic);
+	sMQTTPublicClientEvent(sMQTTClient *client, const std::string &topic, sMQTTMessage *MsgID = nullptr);
 	void setPayload(const std::string &payload);
 	sMQTTClient *Client();
 	std::string Topic();
 	std::string Payload();
+	uint16_t MsgID() const;
 
 private:
 	sMQTTClient *_client;
 	std::string _topic;
 	std::string _payload;
+	sMQTTMessage *_msgId = nullptr;
 };
+
 class sMQTTSubUnSubClientEvent : public sMQTTEvent
 {
 public:
