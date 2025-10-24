@@ -1,5 +1,16 @@
-#include "sMQTTBroker_User.h"
+#include "sMQTTBroker_Modified.h"
 
+/**
+ * @brief Processes incoming MQTT events, handling publish events by topic type.
+ *
+ * For publish events, extracts topic, payload, and message ID, then logs the data.
+ * Attempts to parse the payload as JSON; if successful, adds the message ID and dispatches
+ * to GPS or sensor handlers based on the topic. If parsing fails, logs the error.
+ * Always processes the resend queue to ensure reliable message delivery.
+ *
+ * @param event Pointer to the received MQTT event.
+ * @return true Always returns true to indicate the event was handled.
+ */
 bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
 {
     if (event->Type() != Public_sMQTTEventType)
@@ -15,7 +26,6 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     SMQTT_LOGD("Message ID: %u\n", msgID);
     handleMessageBuffer(topic, payload, msgID);
 
-    // Parse JSON if applicable
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     bool isJson = !err;
@@ -25,16 +35,17 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     }
     else // Check type and dispatch
     {
+        doc["MessageID"] = msgID;
         if (isGpsTopic(topic))
         {
             handleGpsMessage(topic, payload, doc);
         }
         else if (isSensorsTopic(topic))
         {
-            handleSensorMessage(topic, payload, msgID, doc);
+            handleSensorMessage(topic, payload, doc);
         }
     }
-    flushResendQueue();
+    processQueue();
     return true;
 }
 
@@ -45,7 +56,7 @@ bool sMQTTBroker_User::isSensorsTopic(const std::string &topic) const
 
 bool sMQTTBroker_User::isGpsTopic(const std::string &topic) const
 {
-    return topic.rfind("owntracks/") == 0;
+    return topic.rfind("gps/") == 0 || topic.rfind("gps") == 0;
 }
 
 void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
@@ -64,40 +75,44 @@ void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::str
     }
 }
 
-void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc)
+void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     SMQTT_LOGD("Sensor payload received for topic %s\n", topic.c_str());
-    String body;
     addGpsDataAndTimestamp(doc);
-    SMQTT_LOGD("Appending GPS data and timestamp\n");
-    body = constructJson(body, topic, payload, msgID, doc);
-
-    if (!postToBackend(body))
+    String body;
+    body = constructJson(body, topic, payload, doc);
+    // Avoid doing blocking HTTP calls inside event processing.
+    // Enqueue for asynchronous processing to keep MQTT responsive.
+    if (resendQueue.size() >= MAX_QUEUE)
     {
-        if (resendQueue.size() < MAX_QUEUE)
-            resendQueue.push_back(body);
+        // Drop oldest to make room (or could drop newest depending on policy)
+        resendQueue.pop_front();
+        SMQTT_LOGD("Resend queue full; dropping oldest to enqueue newest\n");
     }
+    resendQueue.push_back(body);
 }
 
-String sMQTTBroker_User::constructJson(String &body, const std::string &topic, const std::string &payload, uint16_t msgID, ArduinoJson::JsonDocument &doc)
+String sMQTTBroker_User::constructJson(String &body, const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     JsonDocument out;
-    out["topic"] = topic.c_str();
-    out["controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
-    doc["message_id"] = msgID;
-    out["payload"] = doc;
+    out["Topic"] = topic.c_str();
+    out["Controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
+    out["Payload"] = doc;
     serializeJsonPretty(out, body);
     return body;
 }
 
 void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
 {
+    SMQTT_LOGD("Appending ");
     if (haveGPS)
     {
-        doc["gps"]["latitude"] = lastLat;
-        doc["gps"]["longitude"] = lastLon;
+        SMQTT_LOGD("GPS and ");
+        doc["GPS"]["Latitude"] = lastLat;
+        doc["GPS"]["Longitude"] = lastLon;
     }
-    doc["timestamp"] = currentIsoTimestamp();
+    SMQTT_LOGD("Timestamp data to JSON\n");
+    doc["Timestamp"] = currentIsoTimestamp();
 }
 
 void sMQTTBroker_User::ensureTimeInitialized()
@@ -133,10 +148,10 @@ bool sMQTTBroker_User::postToBackend(const String &body)
         return false;
     }
     ensureTimeInitialized();
-    HTTPClient http;
     String url = String(BACKEND_URL);
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
+    http.setTimeout(2000);
     SMQTT_LOGD("Posting to backend: %s\n", body.c_str());
     int code = http.POST(body);
     if (code > 0)
@@ -150,29 +165,47 @@ bool sMQTTBroker_User::postToBackend(const String &body)
     return false;
 }
 
-void sMQTTBroker_User::flushResendQueue()
+void sMQTTBroker_User::processQueue()
 {
     if (!WiFi.isConnected() || resendQueue.empty())
         return;
-    SMQTT_LOGD("Attempting to resend queue (%d items in total).\n", static_cast<int>(resendQueue.size()));
+    SMQTT_LOGD("Processing message queue\n%d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
     size_t toSend = min(resendQueue.size(), (size_t)3);
     for (size_t i = 0; i < toSend; ++i)
     {
         String body = resendQueue.front();
         if (postToBackend(body))
         {
-            SMQTT_LOGD("Resend successful! Removing:\n'%s'\n from queue.\n", resendQueue.begin()->c_str());
-            resendQueue.erase(resendQueue.begin());
+            resendQueue.pop_front();
+            SMQTT_LOGD("Post to backend successful!\n%s\nCurrently remains: %d item(s) in queue.\n", body.c_str(), static_cast<int>(resendQueue.size()));
+        }
+        else
+        {
+            SMQTT_LOGD("Post to backend failed!\n%s\nCurrently remains: %d item(s) in queue.\n", body.c_str(), static_cast<int>(resendQueue.size()));
+            break;
         }
     }
 }
 
+void sMQTTBroker_User::resetGPSCoordinates()
+{
+    this->lastLat = 0.0;
+    this->lastLon = 0.0;
+    this->haveGPS = false;
+}
+
+// Exist for debugging purposes to view recent messages
 void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
 {
-    messageBuffer.push_back({String(topic.c_str()), String(payload.c_str()), msgID});
+    messageBuffer.emplace_back(messageEntry{String(topic.c_str()), String(payload.c_str()), msgID});
     if (messageBuffer.size() > MAX_BUFFER_SIZE)
     {
-        messageBuffer.erase(messageBuffer.begin());
+        messageBuffer.pop_front();
     }
     SMQTT_LOGD("New payload buffered:\n %s\n", payload.c_str());
+}
+
+int sMQTTBroker_User::getClientCount() const
+{
+    return this->getClients().size();
 }
