@@ -5,6 +5,7 @@
 #include "DHT11.h"
 #include "arduino_secrets.h"
 #include "device_info.h"
+#include "eeprom_logging.h"
 
 constexpr bool debugOn = true;
 constexpr int DHT11_PIN = 4;
@@ -19,6 +20,14 @@ void setupMQTTClient();
 void connectMQTT();
 void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID);
 
+static void flushEepromQueue();
+static void sendOrEnqueue(const char *payload);
+static void buildCompactJson(char out[Elog::RECORD_SIZE],
+                             float temperature,
+                             float humidity,
+                             const char *timestamp,
+                             const char *deviceId);
+
 void setup()
 {
     Serial.begin(115200);
@@ -26,6 +35,15 @@ void setup()
     connectWiFi();
     initDeviceInfo();
     setupMQTTClient();
+  
+    //EEPROM-setup
+    bool recovered = Elog::begin();
+    if (debugOn)
+    {
+        Serial.print(F("[Elog] begin(): recovered = "));
+        Serial.println(recovered ? "true" : "false");
+    }
+    Serial.println("Finnished setting up");
 }
 
 void loop()
@@ -82,6 +100,48 @@ void loop()
             }
         }
         lastPublish = millis();
+    }
+    //Testing
+    static unsigned long lastRead = 0;
+    if (debugOn && millis() - lastRead > 5000)
+    {
+        Serial.println(F("[Elog] Current Indexes:"));
+        Serial.print(F("  ReadIndex: "));  Serial.println(Elog::getReadIndex());
+        Serial.print(F("  WriteIndex: ")); Serial.println(Elog::getWriteIndex());
+        Serial.print(F("  Count: "));      Serial.println(Elog::getQueueCount());
+
+        Serial.println();
+
+        char record[Elog::RECORD_SIZE];
+
+        uint16_t head = Elog::getReadIndex();
+        for (int i = 0; i < 9; i++)
+        {
+            Elog::readFromEeprom(i, record);
+
+            uint8_t  status = (uint8_t)record[Elog::REC_STATUS_OFF];
+            uint16_t len    = (uint16_t)( (uint8_t)record[Elog::REC_LEN_OFF + 0]
+                                        | ((uint16_t)(uint8_t)record[Elog::REC_LEN_OFF + 1] << 8) );
+
+            Serial.print(F("#")); Serial.println(i + 1);
+            Serial.print(F("  status=0x")); Serial.println(status, HEX);
+            Serial.print(F("  len="));      Serial.println(len);
+
+            Serial.println(F("  payload:"));
+            if (status == Elog::STATUS_PENDING || status == Elog::STATUS_SENT)
+            {
+                Serial.write(&record[Elog::REC_DATA_OFF], len);
+                Serial.println();
+            }
+            else
+            {
+                Serial.println(F("  <empty>"));
+            }
+            Serial.println(F("---------------------------------"));
+            delay(50);
+        }
+        Serial.println();
+        lastRead = millis();
     }
     delay(500);
 }
@@ -175,5 +235,102 @@ void createSensorData(StaticJsonDocument<128> &doc, float temperature, float hum
     else
     {
         doc["Humidity"] = humidity;
+    }
+}
+
+// ----- EEPROM-logging functions -----
+static void buildCompactJson(char out[Elog::RECORD_SIZE],
+                             float temperature,
+                             float humidity,
+                             const char *timestamp,
+                             const char *deviceId)
+{
+    // short keys save space
+    StaticJsonDocument<160> doc;
+    if (isnan(temperature)) doc["t"] = serialized("null"); 
+    else                    doc["t"] = temperature;
+    
+    if (isnan(humidity))    doc["h"] = serialized("null"); 
+    else                    doc["h"] = humidity;
+    
+    doc["ts"]  = timestamp;
+    doc["dev"] = deviceId;
+    doc["seq"] = Elog::getAndIncrementSequence();
+    size_t n = serializeJson(doc, out, Elog::MAXJSON_CHARS + 1);
+    out[n] = '\0';
+}
+
+static void flushEepromQueue()
+{
+    if (!mqttClient.connected()) return;
+
+    char payload[Elog::RECORD_SIZE];
+    while (Elog::hasPending())
+    {    
+        if (!Elog::peekPending(payload)) break;
+
+        // Using QoS1 as default. Can be changed to QoS2 if desired
+        if (mqttClient.publish(getMqttTopic(), payload, QOS1))
+        {
+            Elog::markCurrentAsSent();
+            if (debugOn)
+            {
+                Serial.println(F("[Elog] Flushed one pending payload.")); 
+            }
+        }
+        else
+        {
+            if (debugOn)
+            {
+                Serial.print(F("[Elog] Flush publish failed. MQTT state: "));
+                Serial.println(mqttClient.state());
+            }
+            // Abort flush now. We try again next loop when connection is stable
+            break;
+        }
+    }
+}
+
+static void sendOrEnqueue(const char *payload)
+{
+    bool sent = false;
+
+    if (mqttClient.connected())
+    {
+        // Try from QoS0 up to QoS2, break at first successful publish
+        for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
+        {
+            if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
+            {
+                sent = true;
+                if (debugOn)
+                {
+                    Serial.print(F("Published to "));
+                    Serial.print(getMqttTopic());
+                    Serial.print(F(" with QoS "));
+                    Serial.println(qos);
+                }
+                break;
+            }
+        }
+
+        if (!sent && debugOn)
+        {
+            Serial.print(F("Publish failed at all QoS levels. MQTT state: "));
+            Serial.println(mqttClient.state());
+        }
+    }
+
+    if (!sent)
+    {
+    // Not online or publish failed -> add to queue
+        if (!Elog::enqueuePayload(payload))
+        {
+            Serial.println(F("[Elog] enqueuePayload FAILED (för långt JSON eller annat fel)."));
+        }
+        else
+        {
+            if (debugOn) Serial.println(F("[Elog] Enqueued payload (offline/publish fail)."));
+        }
     }
 }
