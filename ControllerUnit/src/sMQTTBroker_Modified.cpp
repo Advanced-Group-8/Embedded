@@ -19,12 +19,15 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     auto *pubEvent = static_cast<sMQTTPublicClientEvent *>(event);
     const std::string &topic = pubEvent->Topic();
     const std::string &payload = pubEvent->Payload();
-    uint16_t msgID = pubEvent->MsgID();
+    const uint16_t msgID = pubEvent->MsgID();
 
     SMQTT_LOGD("Received topic: %s\n", topic.c_str());
-    SMQTT_LOGD("Payload: %s\n", payload.c_str());
-    SMQTT_LOGD("Message ID: %u\n", msgID);
+    SMQTT_LOGD("Received Payload:\n%s\n", payload.c_str());
+    SMQTT_LOGD("Received Message ID: %u\n", msgID);
+
+#ifdef ENABLE_BUFFER_LOGGING
     handleMessageBuffer(topic, payload, msgID);
+#endif
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
@@ -85,7 +88,6 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
     // Enqueue for asynchronous processing to keep MQTT responsive.
     if (resendQueue.size() >= MAX_QUEUE)
     {
-        // Drop oldest to make room (or could drop newest depending on policy)
         resendQueue.pop_front();
         SMQTT_LOGD("Resend queue full; dropping oldest to enqueue newest\n");
     }
@@ -151,8 +153,7 @@ bool sMQTTBroker_User::postToBackend(const String &body)
     String url = String(BACKEND_URL);
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
-    http.setTimeout(2000);
-    SMQTT_LOGD("Posting to backend: %s\n", body.c_str());
+    SMQTT_LOGD("Posting to backend:\n%s\n", body.c_str());
     int code = http.POST(body);
     if (code > 0)
     {
@@ -170,14 +171,15 @@ void sMQTTBroker_User::processQueue()
     if (!WiFi.isConnected() || resendQueue.empty())
         return;
     SMQTT_LOGD("Processing message queue\n%d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
-    size_t toSend = min(resendQueue.size(), (size_t)3);
+    size_t toSend = min(resendQueue.size(), (size_t)5);
     for (size_t i = 0; i < toSend; ++i)
     {
         String body = resendQueue.front();
+        SMQTT_LOGD("Posting queued message:\n%s\n", body.c_str());
         if (postToBackend(body))
         {
             resendQueue.pop_front();
-            SMQTT_LOGD("Post to backend successful!\n%s\nCurrently remains: %d item(s) in queue.\n", body.c_str(), static_cast<int>(resendQueue.size()));
+            SMQTT_LOGD("Post to backend successful!\nCurrently remains: %d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
         }
         else
         {
@@ -194,18 +196,20 @@ void sMQTTBroker_User::resetGPSCoordinates()
     this->haveGPS = false;
 }
 
-// Exist for debugging purposes to view recent messages
+#ifdef ENABLE_BUFFER_LOGGING
+// Exist for debugging purposes
 void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
 {
-    messageBuffer.emplace_back(messageEntry{String(topic.c_str()), String(payload.c_str()), msgID});
-    if (messageBuffer.size() > MAX_BUFFER_SIZE)
+    if (messageBuffer.size() >= MAX_BUFFER_SIZE)
     {
         messageBuffer.pop_front();
     }
+    messageBuffer.emplace_back(messageEntry{String(topic.c_str()), String(payload.c_str()), msgID});
     SMQTT_LOGD("New payload buffered:\n %s\n", payload.c_str());
 }
+#endif
 
-int sMQTTBroker_User::getClientCount() const
+uint16_t sMQTTBroker_User::getClientCount() const
 {
-    return this->getClients().size();
+    return static_cast<uint16_t>(this->getClients().size());
 }

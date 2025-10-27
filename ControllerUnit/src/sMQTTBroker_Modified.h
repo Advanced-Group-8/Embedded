@@ -15,6 +15,9 @@ class sMQTTBroker_User : public sMQTTBroker
 {
 public:
     bool onEvent(sMQTTEvent *event) override;
+    void resetGPSCoordinates();
+    uint16_t getClientCount() const;
+#ifdef ENABLE_BUFFER_LOGGING
     struct messageEntry
     {
         String topic;
@@ -22,8 +25,7 @@ public:
         uint16_t msgID;
     };
     const std::deque<messageEntry> &getMessageBuffer() const { return messageBuffer; }
-    void resetGPSCoordinates();
-    int getClientCount() const;
+#endif
 
 private:
     HTTPClient http;
@@ -36,10 +38,10 @@ private:
     long lastTst = 0;
     bool haveGPS = false;
 
-#ifdef ENABLE_LOGGING
+#ifdef ENABLE_BUFFER_LOGGING
     // Internal message buffer
     std::deque<messageEntry> messageBuffer;
-    static constexpr size_t MAX_BUFFER_SIZE = 5000;
+    static constexpr size_t MAX_BUFFER_SIZE = 1000;
 #endif
 
     // Simple resend queue for failed backend posts
@@ -56,7 +58,9 @@ private:
     String currentIsoTimestamp() const;
     bool postToBackend(const String &body);
     void processQueue();
+#ifdef ENABLE_BUFFER_LOGGING
     void handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID);
+#endif
 };
 
 #endif // SMQTTBROKER_USER_H
