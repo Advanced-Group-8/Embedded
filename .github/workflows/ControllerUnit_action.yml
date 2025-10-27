@@ -1,14 +1,14 @@
-name: PlatformIO CI Build
+name: PlatformIO CI Build - ControllerUnit
 
 on:
   push:
-    branches: [main, SensorUnit_dev]
+    branches: [main, ControllerUnit_dev]
   pull_request:
-    branches: [main, SensorUnit_dev]
+    branches: [main, ControllerUnit_dev]
 
 jobs:
-  build:
-    name: PlatformIO Build and Check
+  build-controllerunit:
+    name: Build and Check ControllerUnit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,12 +26,12 @@ jobs:
 
       - name: Copy arduino_secrets_template.h to arduino_secrets.h (if exists)
         run: |
-          if [ -f SensorUnit/src/arduino_secrets_template.h ]; then cp SensorUnit/src/arduino_secrets_template.h SensorUnit/src/arduino_secrets.h; fi
+          if [ -f ControllerUnit/src/arduino_secrets_template.h ]; then cp ControllerUnit/src/arduino_secrets_template.h ControllerUnit/src/arduino_secrets.h; fi
 
-      - name: Build SensorUnit firmware
+      - name: Build ControllerUnit firmware
         run: |
-          platformio run --project-dir SensorUnit
+          platformio run --project-dir ControllerUnit
 
       - name: Run cppcheck static analysis
         run: |
-          platformio check --project-dir SensorUnit || true
+          platformio check --project-dir ControllerUnit || true

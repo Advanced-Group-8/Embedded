@@ -77,19 +77,18 @@
 #define MQTT_MAX_HEADER_SIZE 5
 
 // QoS2 Support
-
 // QOS Support: Adjust downwards to save memory drastically
 #ifndef MAX_TOPIC_LENGTH
-#define MAX_TOPIC_LENGTH 256
+#define MAX_TOPIC_LENGTH 64
 #endif
 #ifndef MAX_PAYLOAD_LENGTH
-#define MAX_PAYLOAD_LENGTH 256
+#define MAX_PAYLOAD_LENGTH 128
 #endif
 #ifndef MAX_OUTGOING_QOS2_MESSAGES
-#define MAX_OUTGOING_QOS2_MESSAGES 10
+#define MAX_OUTGOING_QOS2_MESSAGES 40
 #endif
 #ifndef MAX_INCOMING_QOS2_MESSAGES
-#define MAX_INCOMING_QOS2_MESSAGES 10
+#define MAX_INCOMING_QOS2_MESSAGES 40
 #endif
 
 enum QOS : uint8_t
