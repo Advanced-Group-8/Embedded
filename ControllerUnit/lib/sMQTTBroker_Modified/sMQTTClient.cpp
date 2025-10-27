@@ -49,7 +49,7 @@ void sMQTTClient::update()
 	{
 		if (now - it->second.timestamp > 5000)
 		{
-			SMQTT_LOGD("Resending QoS1 msgId=%u", it->first);
+			SMQTT_LOGD("Resending QoS1 msgId=%u\n", it->first);
 			it->second.sendTo(this, false);
 			it->second.timestamp = now;
 		}
@@ -82,7 +82,7 @@ void sMQTTClient::processMessage()
 {
 	if (message.type() <= sMQTTMessage::Type::Disconnect)
 	{
-		SMQTT_LOGD("Message type:%s(0x%x)", debugMessageType[message.type() / 0x10], message.type());
+		SMQTT_LOGD("Message type:%s(0x%x)\n", debugMessageType[message.type() / 0x10], message.type());
 	}
 
 	const char *header = message.getVHeader();
