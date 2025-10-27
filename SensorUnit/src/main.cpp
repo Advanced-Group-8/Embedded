@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <PubSubClientQoS2.h>
 #include "DHT11.h"
-#include "arduino_secrets.h"
+#include "arduino_secrets_template.h"
 #include "device_info.h"
 #include "eeprom_logging.h"
 
@@ -50,7 +50,10 @@ void loop()
 {
     if (WiFi.status() != WL_CONNECTED)
     {
+        if (debugOn)
+            Serial.println(F("[Loop] WiFi not connected, reconnecting..."));
         connectWiFi();
+        delay(500);
     }
 
     if (!mqttClient.connected())
@@ -58,9 +61,14 @@ void loop()
         if (debugOn)
             Serial.println(F("[Loop] MQTT not connected, reconnecting..."));
         connectMQTT();
-        delay(5000);
+        //delay(5000);
     }
     mqttClient.loop();
+
+    if(mqttClient.connected())
+    {
+        flushEepromQueue();
+    }
 
     static unsigned long lastPublish = 0;
     if (millis() - lastPublish >= publishInterval)
@@ -71,40 +79,20 @@ void loop()
 
         createSensorData(doc, temperature, humidity, getDeviceID());
 
-        char payload[128];
-        serializeJsonPretty(doc, payload);
-        for (uint8_t qos = QOS1; qos <= QOS1; ++qos)
-        {
-            if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
-            {
-                if (debugOn)
-                {
-                    Serial.print(F("Published to "));
-                    Serial.print(getMqttTopic());
-                    Serial.print(F(" with QoS "));
-                    Serial.print(qos);
-                    Serial.print(F(": \n"));
-                    Serial.println(payload);
-                }
-            }
-            else
-            {
-                if (debugOn)
-                {
-                    Serial.print(F("Publish failed with QoS "));
-                    Serial.print(qos);
-                    Serial.println();
-                    Serial.print(F("MQTT state: "));
-                    Serial.println(mqttClient.state());
-                }
-            }
-        }
+        char payload[Elog::RECORD_SIZE];
+        size_t n = serializeJson(doc, payload, sizeof(payload));
+        payload[n < sizeof(payload) ? n : sizeof(payload) - 1] = '\0';
+
+        sendOrEnqueue(payload);
+        
         lastPublish = millis();
     }
     // Testing
+    static bool dumping = false;
     static unsigned long lastRead = 0;
-    if (debugOn && millis() - lastRead > 5000)
+    if (debugOn && millis() - lastRead > 5000 && dumping == false)
     {
+        dumping = true;
         Serial.println(F("[Elog] Current Indexes:"));
         Serial.print(F("  ReadIndex: "));
         Serial.println(Elog::getReadIndex());
@@ -118,9 +106,11 @@ void loop()
         char record[Elog::RECORD_SIZE];
 
         uint16_t head = Elog::getReadIndex();
-        for (int i = 0; i < 9; i++)
+        const int SHOW = 3;
+        for (int i = 0; i < SHOW; i++)
         {
-            Elog::readFromEeprom(i, record);
+            uint16_t idx = (uint16_t)((head + i) % Elog::CAPACITY);
+            Elog::readFromEeprom(idx, record);
 
             uint8_t status = (uint8_t)record[Elog::REC_STATUS_OFF];
             uint16_t len = (uint16_t)((uint8_t)record[Elog::REC_LEN_OFF + 0] | ((uint16_t)(uint8_t)record[Elog::REC_LEN_OFF + 1] << 8));
@@ -146,6 +136,7 @@ void loop()
             delay(50);
         }
         Serial.println();
+        dumping = false;
         lastRead = millis();
     }
     delay(500);
@@ -156,7 +147,7 @@ void setupMQTTClient()
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setKeepAlive(60);
     mqttClient.setSocketTimeout(60);
-    mqttClient.setBufferSize(128);
+    mqttClient.setBufferSize(256);
 }
 
 void connectWiFi()
@@ -167,11 +158,12 @@ void connectWiFi()
         uint8_t retry = 0;
         while (WiFi.status() != WL_CONNECTED)
         {
-            delay(500);
+            Serial.print(F("Could not connect to WIFI, retrying..."));
+            delay(50);
             retry++;
             if (retry > 40)
             {
-                delay(2000);
+                delay(50);
                 NVIC_SystemReset();
             }
         }
@@ -187,6 +179,11 @@ void connectWiFi()
 
 void connectMQTT()
 {
+    if(WiFi.status() != WL_CONNECTED)
+    {
+        return;
+    }
+
     static unsigned long lastDisconnectTime = 0;
     static uint8_t retryCount = 0;
     if (!mqttClient.connected())
@@ -241,6 +238,7 @@ void createSensorData(StaticJsonDocument<128> &doc, float temperature, float hum
     {
         doc["Humidity"] = humidity;
     }
+    doc["DeviceID"] = deviceID;
 }
 
 // ----- EEPROM-logging functions -----
@@ -308,26 +306,26 @@ static void sendOrEnqueue(const char *payload)
 
     if (mqttClient.connected())
     {
-        // Try from QoS0 up to QoS2, break at first successful publish
-        for (uint8_t qos = QOS0; qos <= QOS2; ++qos)
+        const QOS qos = QOS1; // Default to QoS1
+        const bool ok = mqttClient.publish(getMqttTopic(), payload, qos);
+
+        if (ok)
         {
-            if (mqttClient.publish(getMqttTopic(), payload, static_cast<QOS>(qos)))
+            sent = true;
+            if (debugOn)
             {
-                sent = true;
-                if (debugOn)
-                {
-                    Serial.print(F("Published to "));
-                    Serial.print(getMqttTopic());
-                    Serial.print(F(" with QoS "));
-                    Serial.println(qos);
-                }
-                break;
+                Serial.print(F("Published to "));
+                Serial.print(getMqttTopic());
+                Serial.print(F(" with QoS "));
+                Serial.println(qos);
+                Serial.println(F("Payload:"));
+                Serial.println(payload);
             }
         }
 
-        if (!sent && debugOn)
+        else if (debugOn)
         {
-            Serial.print(F("Publish failed at all QoS levels. MQTT state: "));
+            Serial.print(F("Publish failed. MQTT state: "));
             Serial.println(mqttClient.state());
         }
     }
@@ -337,7 +335,7 @@ static void sendOrEnqueue(const char *payload)
         // Not online or publish failed -> add to queue
         if (!Elog::enqueuePayload(payload))
         {
-            Serial.println(F("[Elog] enqueuePayload FAILED (för långt JSON eller annat fel)."));
+            Serial.println(F("[Elog] enqueuePayload FAILED (JSON too long or other issues)."));
         }
         else
         {

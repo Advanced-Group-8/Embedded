@@ -36,7 +36,7 @@ namespace Elog
     constexpr size_t BASE        = 0;       ///< EEPROM base address.
     constexpr size_t RECORD_SIZE = 256;     ///< Size of each record in bytes.
     constexpr size_t META_SIZE   = 10;      ///< 2+2+2+4 bytes of metadata.
-    constexpr size_t EEPROM_SIZE = 8192;    ///< Total EEPROM size in bytes.
+    constexpr size_t EEPROM_SIZE = 800; //8192;    ///< Total EEPROM size in bytes.
 
     // --- Meta field offsets ---
     constexpr size_t READ_INDEX_ADDRESS  = BASE + 0;  ///< uint16_t read pointer.
