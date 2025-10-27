@@ -95,7 +95,8 @@ namespace Elog
         uint16_t wi = (uint16_t)(EEPROM.read(WRITE_INDEX_ADDRESS) | (EEPROM.read(WRITE_INDEX_ADDRESS+1) << 8));
         uint16_t qc = (uint16_t)(EEPROM.read(COUNT_ADDRESS)       | (EEPROM.read(COUNT_ADDRESS+1)       << 8));
 
-        auto sane = [&](uint16_t r, uint16_t w, uint16_t c){
+        auto sane = [&](uint16_t r, uint16_t w, uint16_t c)
+        {
             return (r < CAPACITY) && (w < CAPACITY) && (c <= CAPACITY);
         };
 

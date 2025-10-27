@@ -265,16 +265,19 @@ static void buildCompactJson(char out[Elog::RECORD_SIZE],
                              const char *timestamp,
                              const char *deviceId)
 {
-  // short keys save space
-  StaticJsonDocument<160> doc;
-  if (isnan(temperature)) doc["t"] = serialized("null"); else doc["t"] = temperature;
-  if (isnan(humidity))    doc["h"] = serialized("null"); else doc["h"] = humidity;
-  doc["ts"]  = timestamp;
-  doc["dev"] = deviceId;
-  doc["seq"] = Elog::getAndIncrementSequence();
-
-  size_t n = serializeJson(doc, out, Elog::MAXJSON_CHARS + 1);
-  out[n] = '\0';
+    // short keys save space
+    StaticJsonDocument<160> doc;
+    if (isnan(temperature)) doc["t"] = serialized("null"); 
+    else                    doc["t"] = temperature;
+    
+    if (isnan(humidity))    doc["h"] = serialized("null"); 
+    else                    doc["h"] = humidity;
+    
+    doc["ts"]  = timestamp;
+    doc["dev"] = deviceId;
+    doc["seq"] = Elog::getAndIncrementSequence();
+    size_t n = serializeJson(doc, out, Elog::MAXJSON_CHARS + 1);
+    out[n] = '\0';
 }
 
 static void flushEepromQueue()
@@ -291,7 +294,7 @@ static void flushEepromQueue()
         {
             Elog::markCurrentAsSent();
             if (debugOn)
-            { 
+            {
                 Serial.println(F("[Elog] Flushed one pending payload.")); 
             }
         }
