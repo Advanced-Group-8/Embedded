@@ -39,6 +39,7 @@ public:
 	virtual void onRemove(sMQTTClient *) {};
 	SMQTT_DEPRECATED("onPublish is deprecated, use onEvent")
 	virtual void onPublish(sMQTTClient *client, const std::string &topic, const std::string &payload) {};
+	const sMQTTClientList &getClients() const { return clients; }
 
 private:
 	// inner function
