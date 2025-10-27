@@ -35,8 +35,8 @@ void setup()
     connectWiFi();
     initDeviceInfo();
     setupMQTTClient();
-  
-    //EEPROM-setup
+
+    // EEPROM-setup
     bool recovered = Elog::begin();
     if (debugOn)
     {
@@ -101,14 +101,17 @@ void loop()
         }
         lastPublish = millis();
     }
-    //Testing
+    // Testing
     static unsigned long lastRead = 0;
     if (debugOn && millis() - lastRead > 5000)
     {
         Serial.println(F("[Elog] Current Indexes:"));
-        Serial.print(F("  ReadIndex: "));  Serial.println(Elog::getReadIndex());
-        Serial.print(F("  WriteIndex: ")); Serial.println(Elog::getWriteIndex());
-        Serial.print(F("  Count: "));      Serial.println(Elog::getQueueCount());
+        Serial.print(F("  ReadIndex: "));
+        Serial.println(Elog::getReadIndex());
+        Serial.print(F("  WriteIndex: "));
+        Serial.println(Elog::getWriteIndex());
+        Serial.print(F("  Count: "));
+        Serial.println(Elog::getQueueCount());
 
         Serial.println();
 
@@ -119,13 +122,15 @@ void loop()
         {
             Elog::readFromEeprom(i, record);
 
-            uint8_t  status = (uint8_t)record[Elog::REC_STATUS_OFF];
-            uint16_t len    = (uint16_t)( (uint8_t)record[Elog::REC_LEN_OFF + 0]
-                                        | ((uint16_t)(uint8_t)record[Elog::REC_LEN_OFF + 1] << 8) );
+            uint8_t status = (uint8_t)record[Elog::REC_STATUS_OFF];
+            uint16_t len = (uint16_t)((uint8_t)record[Elog::REC_LEN_OFF + 0] | ((uint16_t)(uint8_t)record[Elog::REC_LEN_OFF + 1] << 8));
 
-            Serial.print(F("#")); Serial.println(i + 1);
-            Serial.print(F("  status=0x")); Serial.println(status, HEX);
-            Serial.print(F("  len="));      Serial.println(len);
+            Serial.print(F("#"));
+            Serial.println(i + 1);
+            Serial.print(F("  status=0x"));
+            Serial.println(status, HEX);
+            Serial.print(F("  len="));
+            Serial.println(len);
 
             Serial.println(F("  payload:"));
             if (status == Elog::STATUS_PENDING || status == Elog::STATUS_SENT)
@@ -247,13 +252,17 @@ static void buildCompactJson(char out[Elog::RECORD_SIZE],
 {
     // short keys save space
     StaticJsonDocument<160> doc;
-    if (isnan(temperature)) doc["t"] = serialized("null"); 
-    else                    doc["t"] = temperature;
-    
-    if (isnan(humidity))    doc["h"] = serialized("null"); 
-    else                    doc["h"] = humidity;
-    
-    doc["ts"]  = timestamp;
+    if (isnan(temperature))
+        doc["t"] = serialized("null");
+    else
+        doc["t"] = temperature;
+
+    if (isnan(humidity))
+        doc["h"] = serialized("null");
+    else
+        doc["h"] = humidity;
+
+    doc["ts"] = timestamp;
     doc["dev"] = deviceId;
     doc["seq"] = Elog::getAndIncrementSequence();
     size_t n = serializeJson(doc, out, Elog::MAXJSON_CHARS + 1);
@@ -262,12 +271,14 @@ static void buildCompactJson(char out[Elog::RECORD_SIZE],
 
 static void flushEepromQueue()
 {
-    if (!mqttClient.connected()) return;
+    if (!mqttClient.connected())
+        return;
 
     char payload[Elog::RECORD_SIZE];
     while (Elog::hasPending())
-    {    
-        if (!Elog::peekPending(payload)) break;
+    {
+        if (!Elog::peekPending(payload))
+            break;
 
         // Using QoS1 as default. Can be changed to QoS2 if desired
         if (mqttClient.publish(getMqttTopic(), payload, QOS1))
@@ -275,7 +286,7 @@ static void flushEepromQueue()
             Elog::markCurrentAsSent();
             if (debugOn)
             {
-                Serial.println(F("[Elog] Flushed one pending payload.")); 
+                Serial.println(F("[Elog] Flushed one pending payload."));
             }
         }
         else
@@ -323,14 +334,15 @@ static void sendOrEnqueue(const char *payload)
 
     if (!sent)
     {
-    // Not online or publish failed -> add to queue
+        // Not online or publish failed -> add to queue
         if (!Elog::enqueuePayload(payload))
         {
             Serial.println(F("[Elog] enqueuePayload FAILED (för långt JSON eller annat fel)."));
         }
         else
         {
-            if (debugOn) Serial.println(F("[Elog] Enqueued payload (offline/publish fail)."));
+            if (debugOn)
+                Serial.println(F("[Elog] Enqueued payload (offline/publish fail)."));
         }
     }
 }
