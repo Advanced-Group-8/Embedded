@@ -5,7 +5,9 @@
 #include "DHT11.h"
 #include "arduino_secrets.h"
 #include "device_info.h"
+#ifdef EEPROM_SUPPORT
 #include "eeprom_logging.h"
+#endif
 
 #ifdef DEBUG_ON
 constexpr bool debugOn = true;
@@ -24,9 +26,11 @@ void setupMQTTClient();
 void connectMQTT();
 void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID);
 
+#ifdef EEPROM_SUPPORT
 static void flushEepromQueue();
 static void sendOrEnqueue(const char *payload);
 static void buildCompactJson(char out[Elog::RECORD_SIZE], float temperature, float humidity, const char *timestamp, const char *deviceId);
+#endif
 
 void setup()
 {
@@ -36,6 +40,7 @@ void setup()
     initDeviceInfo();
     setupMQTTClient();
 
+#ifdef EEPROM_SUPPORT
     // EEPROM-setup
     bool recovered = Elog::begin();
     if (debugOn)
@@ -43,6 +48,7 @@ void setup()
         Serial.print(F("[Elog] begin(): recovered = "));
         Serial.println(recovered ? "true" : "false");
     }
+#endif
     Serial.println("Finished setup");
 }
 
@@ -53,9 +59,7 @@ void loop()
         if (WiFi.status() != WL_CONNECTED)
             connectWiFi();
         if (!mqttClient.connected())
-            if (debugOn)
-                Serial.println(F("[Loop] MQTT not connected, reconnecting..."));
-        connectMQTT();
+            connectMQTT();
     }
     mqttClient.loop();
 
@@ -68,7 +72,7 @@ void loop()
 
         createSensorData(doc, temperature, humidity, getDeviceID());
         char payload[128];
-        serializeJsonPretty(doc, payload);
+        serializeJsonPretty(doc, payload); // Change to serializeJson for prod
         if (mqttClient.publish(getMqttTopic(), payload, QOS1))
         {
             if (debugOn)
@@ -91,6 +95,7 @@ void loop()
         lastPublish = millis();
     }
 
+#ifdef EEPROM_SUPPORT
     // Testing
     static unsigned long lastRead = 0;
     if (debugOn && millis() - lastRead > 5000)
@@ -138,7 +143,8 @@ void loop()
         Serial.println();
         lastRead = millis();
     }
-    delay(500);
+#endif
+    delay(100);
 }
 
 void setupMQTTClient()
@@ -187,7 +193,7 @@ void connectMQTT()
                 if (debugOn)
                 {
                     char buf[64];
-                    snprintf(buf, sizeof(buf), "Connecting to %s:%d", MQTT_BROKER, MQTT_PORT);
+                    snprintf(buf, sizeof(buf), "[MQTT] Connecting to %s:%d", MQTT_BROKER, MQTT_PORT);
                     Serial.println(buf);
                 }
             }
@@ -232,6 +238,7 @@ void createSensorData(StaticJsonDocument<128> &doc, float temperature, float hum
     }
 }
 
+#ifdef EEPROM_SUPPORT
 // ----- EEPROM-logging functions -----
 static void buildCompactJson(char out[Elog::RECORD_SIZE],
                              float temperature,
@@ -335,3 +342,4 @@ static void sendOrEnqueue(const char *payload)
         }
     }
 }
+#endif
