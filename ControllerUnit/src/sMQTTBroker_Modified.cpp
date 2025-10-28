@@ -36,9 +36,8 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     {
         SMQTT_LOGD("JSON parse failed: %s\n", err.c_str());
     }
-    else // Check type and dispatch
+    else
     {
-        doc["MessageID"] = msgID;
         if (isGpsTopic(topic))
         {
             handleGpsMessage(topic, payload, doc);
@@ -81,11 +80,8 @@ void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::str
 void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     SMQTT_LOGD("Sensor payload received for topic %s\n", topic.c_str());
-    addGpsDataAndTimestamp(doc);
     String body;
     body = constructJson(body, topic, payload, doc);
-    // Avoid doing blocking HTTP calls inside event processing.
-    // Enqueue for asynchronous processing to keep MQTT responsive.
     if (resendQueue.size() >= MAX_QUEUE)
     {
         resendQueue.pop_front();
@@ -97,24 +93,23 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
 String sMQTTBroker_User::constructJson(String &body, const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     JsonDocument out;
-    out["Topic"] = topic.c_str();
-    out["Controller"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
-    out["Payload"] = doc;
-    serializeJsonPretty(out, body);
+    out["id"] = 1;
+    out["deviceId"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
+    out["lat"] = lastLat;
+    out["lng"] = lastLon;
+    out["temperature"] = doc["Temperature"].as<float>();
+    out["humidity"] = doc["Humidity"].as<float>();
+    out["createdAt"] = currentIsoTimestamp();
+    serializeJson(out, body);
     return body;
 }
 
 void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
 {
-    SMQTT_LOGD("Appending ");
-    if (haveGPS)
-    {
-        SMQTT_LOGD("GPS and ");
-        doc["GPS"]["Latitude"] = lastLat;
-        doc["GPS"]["Longitude"] = lastLon;
-    }
-    SMQTT_LOGD("Timestamp data to JSON\n");
-    doc["Timestamp"] = currentIsoTimestamp();
+    SMQTT_LOGD("Appending GPS and Timestamp data to JSON\n");
+    doc["lat"] = lastLat;
+    doc["lng"] = lastLon;
+    doc["createdAt"] = currentIsoTimestamp();
 }
 
 void sMQTTBroker_User::ensureTimeInitialized()
@@ -132,7 +127,7 @@ String sMQTTBroker_User::currentIsoTimestamp() const
     struct tm tmInfo;
     localtime_r(&now, &tmInfo);
     char buf[25];
-    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
              tmInfo.tm_year + 1900,
              tmInfo.tm_mon + 1,
              tmInfo.tm_mday,
