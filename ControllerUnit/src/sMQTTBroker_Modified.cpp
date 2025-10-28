@@ -146,13 +146,14 @@ bool sMQTTBroker_User::postToBackend(const String &body)
 {
     if (!WiFi.isConnected())
     {
-        SMQTT_LOGD("WiFi not connected; skipping backend POST\n");
+        SMQTT_LOGD("WiFi not connected; skipping backend POST!\n");
         return false;
     }
     ensureTimeInitialized();
     String url = String(BACKEND_URL);
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("Authorization", "Bearer " + String(AZURE_JWT_TOKEN));
     SMQTT_LOGD("Posting to backend:\n%s\n", body.c_str());
     int code = http.POST(body);
     if (code > 0)
@@ -171,7 +172,7 @@ void sMQTTBroker_User::processQueue()
     if (!WiFi.isConnected() || resendQueue.empty())
         return;
     SMQTT_LOGD("Processing message queue\n%d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
-    size_t toSend = min(resendQueue.size(), (size_t)5);
+    size_t toSend = min(resendQueue.size(), (size_t)50); // Limit number of attempts per call - 50 is probably bad!
     for (size_t i = 0; i < toSend; ++i)
     {
         String body = resendQueue.front();
@@ -205,7 +206,7 @@ void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::
         messageBuffer.pop_front();
     }
     messageBuffer.emplace_back(messageEntry{String(topic.c_str()), String(payload.c_str()), msgID});
-    SMQTT_LOGD("New payload buffered:\n %s\n", payload.c_str());
+    SMQTT_LOGD("New payload buffered:\n%s\n", payload.c_str());
 }
 #endif
 

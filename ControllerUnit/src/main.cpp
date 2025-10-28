@@ -18,7 +18,7 @@
 #define Seconds *1000
 static constexpr unsigned long DIAGNOSTICS_PRINTING_INTERVAL = 30 Seconds; // Print diagnostic information every 30 seconds
 static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60 Seconds;         // Print buffer every 60 seconds
-static constexpr unsigned long GPS_CLEAR_INTERVAL = 120 Seconds;           // Clear GPS data if no updates for 2 minutes
+static constexpr unsigned long GPS_CLEAR_INTERVAL = 60 Seconds;            // Clear GPS data if no updates for 60 seconds
 
 void startNetworkingInterfaces();
 void enable_WiFi_STA();
@@ -38,10 +38,17 @@ void setup()
 
 void loop()
 {
-    if (WiFi.status() != WL_CONNECTED || WiFi.softAPIP() != IPAddress(AP_IP))
+    if (WiFi.status() != WL_CONNECTED)
     {
-        LOG_MESSAGE("Either STA or AP is down, restarting interfaces...\n");
-        startNetworkingInterfaces();
+        LOG_MESSAGE("WiFi STA disconnected, reconnecting...\n");
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        delay(5 Seconds);
+    }
+    else if (WiFi.softAPIP() != IPAddress(AP_IP))
+    {
+        LOG_MESSAGE("WiFi AP is down, restarting...\n");
+        WiFi.softAP(AP_WIFI_SSID, AP_WIFI_PASSWORD, 6, 1, 30, false);
+        delay(5 Seconds);
     }
     else
         Broker.update();
@@ -91,22 +98,27 @@ void startNetworkingInterfaces()
 {
     WiFi.mode(WIFI_AP_STA);
     enable_WiFi_AP();
-    delay(1 Seconds);
     enable_WiFi_STA();
-    delay(1 Seconds);
 }
 
 void enable_WiFi_STA()
 {
     WiFi.disconnect();
-    delay(1 Seconds);
+    delay(5 Seconds);
     LOG_MESSAGE("Setting hostname to %s\n", WiFi.macAddress().c_str());
     WiFi.setHostname(WiFi.macAddress().c_str());
     LOG_MESSAGE("Connecting to WiFi SSID: %s\n", WIFI_SSID);
-    if (WiFi.status() != WL_CONNECTED)
+    uint8_t attempt = 0;
+    while (attempt <= 50)
     {
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        delay(1 Seconds);
+        if (WiFi.waitForConnectResult() == WL_CONNECTED)
+        {
+            LOG_MESSAGE("WiFi connected successfully!\n");
+            break;
+        }
+        LOG_MESSAGE("WiFi connection attempt %d failed, retrying...\n", ++attempt);
+        delay(5 Seconds);
     }
     LOG_MESSAGE("Connection established!\nIP address: %s\n", WiFi.localIP().toString().c_str());
 }
@@ -120,13 +132,13 @@ void enable_WiFi_AP()
     IPAddress LEASE_START(192, 168, 10, 2);
     WiFi.softAPConfig(_AP_IP, _AP_IP, _AP_Subnet);
     WiFi.softAP(AP_WIFI_SSID, AP_WIFI_PASSWORD, 1, 1, 20, false);
+    delay(5 Seconds);
     LOG_MESSAGE("AP started!\nAP IP address: %s\n", WiFi.softAPIP().toString().c_str());
 }
 
 void printConnectivityDiagnostics()
 {
     LOG_MESSAGE("\n--- Connectivity Diagnostics ---\n");
-
     // STA Info
     bool WifiStatus = (WiFi.status() == WL_CONNECTED);
     LOG_MESSAGE("WiFi STA Status: %s\n", WifiStatus ? "Connected" : "Disconnected");
@@ -137,9 +149,7 @@ void printConnectivityDiagnostics()
         LOG_MESSAGE("Signal Strength (RSSI): %d dBm\n", WiFi.RSSI());
     }
     else
-    {
         LOG_MESSAGE("Not connected to any network.\n");
-    }
 
     // AP Info
     int apClients = WiFi.softAPgetStationNum();
@@ -150,7 +160,6 @@ void printConnectivityDiagnostics()
 
     // General Info
     LOG_MESSAGE("MQTT Clients: %d\n", Broker.getClientCount());
-
     LOG_MESSAGE("--- End of Diagnostics ---\n");
 }
 
