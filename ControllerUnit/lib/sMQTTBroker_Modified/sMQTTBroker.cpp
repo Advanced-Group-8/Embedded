@@ -25,7 +25,7 @@ void sMQTTBroker::update()
 	TCPClient client = _server->available();
 	if (client)
 	{
-		SMQTT_LOGD("New Client\n");
+		SMQTT_LOGD("New client connected. Clients: %d\n", clients.size() + 1);
 		sMQTTClient *sClient = new sMQTTClient(this, client);
 		clients.push_back(sClient);
 	}
@@ -56,7 +56,7 @@ void sMQTTBroker::update()
 
 			delete c;
 			clit = clients.erase(clit);
-			SMQTT_LOGD("Clients %d\n", clients.size());
+			SMQTT_LOGD("Client removed. Clients: %d\n", clients.size());
 			if (clit == clients.end())
 				break;
 			clit--;
@@ -123,9 +123,7 @@ void sMQTTBroker::publish(sMQTTClient *client, sMQTTTopic *topic, sMQTTMessage *
 	{
 		uint16_t msgId = msg->getMessageId();
 		SMQTT_LOGD("PUBACK: Received PUBLISH with msgID=%u\n", msgId);
-		uint8_t puback[4] = {0x40, 0x02,
-							 static_cast<uint8_t>(msgId >> 8),
-							 static_cast<uint8_t>(msgId & 0xFF)};
+		uint8_t puback[4] = {0x40, 0x02, static_cast<uint8_t>(msgId >> 8), static_cast<uint8_t>(msgId & 0xFF)};
 		SMQTT_LOGD("PUBACK: Sending PUBACK with msgID=%u (bytes: 0x%02X 0x%02X)\n", msgId, puback[2], puback[3]);
 		client->write(reinterpret_cast<const char *>(puback), sizeof(puback));
 		client->flushSocket();
@@ -255,7 +253,7 @@ bool sMQTTBroker::isClientConnected(sMQTTClient *client)
 			return false;
 		if (c->getClientId() == client->getClientId())
 		{
-			SMQTT_LOGD("Found:%s client size:%d\n",
+			SMQTT_LOGD("Found: %s client size: %d\n",
 					   client->getClientId().c_str(), clients.size());
 			return true;
 		}
@@ -263,10 +261,7 @@ bool sMQTTBroker::isClientConnected(sMQTTClient *client)
 	return false;
 };
 
-void sMQTTBroker::publish(const std::string &topic,
-						  const std::string &payload,
-						  unsigned char qos,
-						  bool retain)
+void sMQTTBroker::publish(const std::string &topic, const std::string &payload, unsigned char qos, bool retain)
 {
 	// static counter for msg ids (wraparound)
 	static uint16_t msg_id_counter = 1;
@@ -316,8 +311,7 @@ void sMQTTBroker::publish(const std::string &topic,
 
 	if (retain)
 	{
-		sMQTTTopic Topic((std::string &)topic,
-						 (std::string &)payload, qos);
+		sMQTTTopic Topic((std::string &)topic, (std::string &)payload, qos);
 		updateRetainedTopic(&Topic);
 	}
 };
