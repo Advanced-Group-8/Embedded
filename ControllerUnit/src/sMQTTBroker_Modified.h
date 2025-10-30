@@ -11,7 +11,7 @@
 #include <HTTPClient.h>
 #include "arduino_secrets.h"
 
-class sMQTTBroker_User : public sMQTTBroker
+class sMQTTBroker_Modified : public sMQTTBroker
 {
 public:
     bool onEvent(sMQTTEvent *event) override;
@@ -28,8 +28,6 @@ public:
 #endif
 
 private:
-    HTTPClient http;
-
     // Time/NTP
     bool timeInitialized = false;
     // GPS data

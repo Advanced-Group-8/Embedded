@@ -11,7 +11,7 @@
  * @param event Pointer to the received MQTT event.
  * @return true Always returns true to indicate the event was handled.
  */
-bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
+bool sMQTTBroker_Modified::onEvent(sMQTTEvent *event)
 {
     if (event->Type() != Public_sMQTTEventType)
         return true;
@@ -52,17 +52,17 @@ bool sMQTTBroker_User::onEvent(sMQTTEvent *event)
     return true;
 }
 
-bool sMQTTBroker_User::isSensorsTopic(const std::string &topic) const
+bool sMQTTBroker_Modified::isSensorsTopic(const std::string &topic) const
 {
     return topic.rfind("sensors/") == 0;
 }
 
-bool sMQTTBroker_User::isGpsTopic(const std::string &topic) const
+bool sMQTTBroker_Modified::isGpsTopic(const std::string &topic) const
 {
     return topic.rfind("gps/") == 0 || topic.rfind("gps") == 0;
 }
 
-void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
+void sMQTTBroker_Modified::handleGpsMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     if (doc["lat"].is<double>() && doc["lon"].is<double>())
     {
@@ -78,14 +78,12 @@ void sMQTTBroker_User::handleGpsMessage(const std::string &topic, const std::str
     }
 }
 
-void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
+void sMQTTBroker_Modified::handleSensorMessage(const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     SMQTT_LOGD("Sensor payload received for topic %s\n", topic.c_str());
     addGpsDataAndTimestamp(doc);
     String body;
     body = constructJson(body, topic, payload, doc);
-    // Avoid doing blocking HTTP calls inside event processing.
-    // Enqueue for asynchronous processing to keep MQTT responsive.
     if (resendQueue.size() >= MAX_QUEUE)
     {
         resendQueue.pop_front();
@@ -94,7 +92,7 @@ void sMQTTBroker_User::handleSensorMessage(const std::string &topic, const std::
     resendQueue.push_back(body);
 }
 
-String sMQTTBroker_User::constructJson(String &body, const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
+String sMQTTBroker_Modified::constructJson(String &body, const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
 {
     JsonDocument out;
     out["Topic"] = topic.c_str();
@@ -104,7 +102,7 @@ String sMQTTBroker_User::constructJson(String &body, const std::string &topic, c
     return body;
 }
 
-void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
+void sMQTTBroker_Modified::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) const
 {
     SMQTT_LOGD("Appending ");
     if (haveGPS)
@@ -117,7 +115,7 @@ void sMQTTBroker_User::addGpsDataAndTimestamp(ArduinoJson::JsonDocument &doc) co
     doc["Timestamp"] = currentIsoTimestamp();
 }
 
-void sMQTTBroker_User::ensureTimeInitialized()
+void sMQTTBroker_Modified::ensureTimeInitialized()
 {
     if (timeInitialized)
         return;
@@ -125,7 +123,7 @@ void sMQTTBroker_User::ensureTimeInitialized()
     timeInitialized = true;
 }
 
-String sMQTTBroker_User::currentIsoTimestamp() const
+String sMQTTBroker_Modified::currentIsoTimestamp() const
 {
     time_t now;
     time(&now);
@@ -142,13 +140,14 @@ String sMQTTBroker_User::currentIsoTimestamp() const
     return String(buf);
 }
 
-bool sMQTTBroker_User::postToBackend(const String &body)
+bool sMQTTBroker_Modified::postToBackend(const String &body)
 {
     if (!WiFi.isConnected())
     {
         SMQTT_LOGD("WiFi not connected; skipping backend POST!\n");
         return false;
     }
+    HTTPClient http;
     ensureTimeInitialized();
     String url = String(BACKEND_URL);
     http.begin(url);
@@ -167,12 +166,14 @@ bool sMQTTBroker_User::postToBackend(const String &body)
     return false;
 }
 
-void sMQTTBroker_User::processQueue()
+void sMQTTBroker_Modified::processQueue()
 {
     if (!WiFi.isConnected() || resendQueue.empty())
         return;
-    SMQTT_LOGD("Processing message queue\n%d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
-    size_t toSend = min(resendQueue.size(), (size_t)50); // Limit number of attempts per call - 50 is probably bad!
+    SMQTT_LOGD("Processing message queue. %d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
+    // Limit number of attempts per call - Considering connection drops, having a larger number here means more of the buffer empties on each send.
+    // In effect - The broker handles 15+ clients only when this number is unreasonably high.
+    size_t toSend = min(resendQueue.size(), (size_t)50);
     for (size_t i = 0; i < toSend; ++i)
     {
         String body = resendQueue.front();
@@ -190,7 +191,7 @@ void sMQTTBroker_User::processQueue()
     }
 }
 
-void sMQTTBroker_User::resetGPSCoordinates()
+void sMQTTBroker_Modified::resetGPSCoordinates()
 {
     this->lastLat = 0.0;
     this->lastLon = 0.0;
@@ -199,7 +200,7 @@ void sMQTTBroker_User::resetGPSCoordinates()
 
 #ifdef ENABLE_BUFFER_LOGGING
 // Exist for debugging purposes
-void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
+void sMQTTBroker_Modified::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
 {
     if (messageBuffer.size() >= MAX_BUFFER_SIZE)
     {
@@ -210,7 +211,7 @@ void sMQTTBroker_User::handleMessageBuffer(const std::string &topic, const std::
 }
 #endif
 
-uint16_t sMQTTBroker_User::getClientCount() const
+uint16_t sMQTTBroker_Modified::getClientCount() const
 {
     return static_cast<uint16_t>(this->getClients().size());
 }

@@ -27,7 +27,7 @@ void printMessageBuffer();
 void printConnectivityDiagnostics();
 void printFreeMemory();
 
-sMQTTBroker_User Broker;
+sMQTTBroker_Modified Broker;
 
 void setup()
 {
@@ -152,11 +152,9 @@ void printConnectivityDiagnostics()
         LOG_MESSAGE("Not connected to any network.\n");
 
     // AP Info
-    int apClients = WiFi.softAPgetStationNum();
-    LOG_MESSAGE("WiFi AP Status: %d\n", apClients > 0 ? " clients Connected" : "No Clients Connected");
     LOG_MESSAGE("AP SSID: %s\n", WiFi.softAPSSID().c_str());
     LOG_MESSAGE("AP IP Address: %s\n", WiFi.softAPIP().toString().c_str());
-    LOG_MESSAGE("Number of clients connected to AP: %d\n", apClients);
+    LOG_MESSAGE("Number of clients connected to AP: %d\n", WiFi.softAPgetStationNum());
 
     // General Info
     LOG_MESSAGE("MQTT Clients: %d\n", Broker.getClientCount());
