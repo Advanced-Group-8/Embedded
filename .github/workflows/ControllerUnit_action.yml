@@ -28,6 +28,10 @@ jobs:
         run: |
           if [ -f ControllerUnit/src/arduino_secrets_template.h ]; then cp ControllerUnit/src/arduino_secrets_template.h ControllerUnit/src/arduino_secrets.h; fi
 
+      - name: Copy auth_secrets_template.h to auth_secrets.h (if exists)
+        run: |
+          if [ -f ControllerUnit/src/auth_secrets_template.h ]; then cp ControllerUnit/src/auth_secrets_template.h ControllerUnit/src/auth_secrets.h; fi
+
       - name: Build ControllerUnit firmware
         run: |
           platformio run --project-dir ControllerUnit
