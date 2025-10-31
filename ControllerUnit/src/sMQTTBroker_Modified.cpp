@@ -1,4 +1,5 @@
 #include "sMQTTBroker_Modified.h"
+#include "auth.h"
 
 /**
  * @brief Processes incoming MQTT events, handling publish events by topic type.
@@ -145,10 +146,24 @@ bool sMQTTBroker_User::postToBackend(const String &body)
         return false;
     }
     ensureTimeInitialized();
+
+    static bool jwtObtained = false;
+    static String jwtToken;
+    if (!jwtObtained)
+    {
+        jwtToken = JWT_signUp();
+        if (jwtToken.isEmpty())
+        {
+            SMQTT_LOGD("Failed to obtain JWT token.\n");
+            return false;
+        }
+        jwtObtained = true;
+    }
+
     String url = String(BACKEND_URL);
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("Authorization", "Bearer " + String(AZURE_JWT_TOKEN));
+    http.addHeader("Authorization", "Bearer " + String(jwtToken));
     SMQTT_LOGD("Posting to backend:\n%s\n", body.c_str());
     int code = http.POST(body);
     if (code > 0)
