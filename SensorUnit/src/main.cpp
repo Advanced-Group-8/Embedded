@@ -72,7 +72,11 @@ void loop()
 
         createSensorData(doc, temperature, humidity, getDeviceID());
         char payload[128];
-        serializeJsonPretty(doc, payload); // Change to serializeJson for prod
+#ifdef DEBUG_ON
+        serializeJsonPretty(doc, payload);
+#else
+        serializeJson(doc, payload);
+#endif
         if (mqttClient.publish(getMqttTopic(), payload, QOS1))
         {
             if (debugOn)
