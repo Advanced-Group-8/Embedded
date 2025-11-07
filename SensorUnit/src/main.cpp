@@ -160,6 +160,8 @@ void connectMQTT()
 void createSensorData(StaticJsonDocument<128> &doc, float temperature, float humidity, const char *deviceID)
 {
     doc.clear();
+    static uint32_t internalDeviceID = random(0, 100);
+    doc["deviceId"] = internalDeviceID;
     if (isnan(temperature))
     {
         doc["Temperature"] = serialized("null");
