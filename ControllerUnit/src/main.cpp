@@ -4,7 +4,7 @@
 #include "sMQTTBroker_Modified.h"
 #include "arduino_secrets.h"
 
-#ifdef ENABLE_LOGGING
+#ifdef ENABLE_LOG_MESSAGE
 #define LOG_MESSAGE(...) Serial.printf(__VA_ARGS__)
 #else
 #define LOG_MESSAGE(...) \
@@ -12,20 +12,21 @@
     {                    \
     } while (0)
 #endif
-#define AP_IP 192, 168, 10, 1
-#define AP_SUBNET 255, 255, 255, 0
-
 #define Seconds *1000
+#ifdef DEVELOPMENT_BUILD
+static constexpr unsigned long BACKEND_UPLOAD_INTERVAL = 10 Seconds;       // Upload to backend every 10 seconds
 static constexpr unsigned long DIAGNOSTICS_PRINTING_INTERVAL = 30 Seconds; // Print diagnostic information every 30 seconds
-static constexpr unsigned long BUFFER_PRINT_INTERVAL = 60 Seconds;         // Print buffer every 60 seconds
 static constexpr unsigned long GPS_CLEAR_INTERVAL = 60 Seconds;            // Clear GPS data if no updates for 60 seconds
+#endif
 
 void startNetworkingInterfaces();
 void enable_WiFi_STA();
 void enable_WiFi_AP();
-void printMessageBuffer();
+void uploadToBackend(const unsigned long interval);
+#ifdef DEVELOPMENT_BUILD
 void printConnectivityDiagnostics();
 void printFreeMemory();
+#endif
 
 sMQTTBroker_Modified Broker;
 
@@ -53,20 +54,14 @@ void loop()
     else
         Broker.update();
 
-#ifdef ENABLE_BUFFER_LOGGING
-    // Print buffer periodically
-    static unsigned long lastBufferPrint = 0;
-    if (millis() - lastBufferPrint >= BUFFER_PRINT_INTERVAL)
-    {
-        printMessageBuffer();
-        lastBufferPrint = millis();
-    }
-#endif
+    uploadToBackend(BACKEND_UPLOAD_INTERVAL);
 
+#ifdef DEVELOPMENT_BUILD
     // Periodically clears lat and lon if no GPS updates received
     static unsigned long lastGpsReset = 0;
     if (millis() - lastGpsReset >= GPS_CLEAR_INTERVAL)
     {
+        LOG_MESSAGE("Resetting GPS coordinates.\n");
         Broker.resetGPSCoordinates();
         lastGpsReset = millis();
     }
@@ -79,20 +74,18 @@ void loop()
         printFreeMemory();
         lastDiagPrint = millis();
     }
+#endif
 }
 
-#ifdef ENABLE_BUFFER_LOGGING
-void printMessageBuffer()
+void uploadToBackend(const unsigned long interval)
 {
-    LOG_MESSAGE("\n--- Message Buffer Dump ---\n");
-    for (size_t i = 0; i < Broker.getMessageBuffer().size(); ++i)
+    static unsigned long lastQueueProcess = 0;
+    if (millis() - lastQueueProcess >= interval)
     {
-        const auto &buffer = Broker.getMessageBuffer()[i];
-        LOG_MESSAGE("[%zu] Topic: %s\nPayload:\n%s\nMessage ID: %u\n", i + 1, buffer.topic.c_str(), buffer.payload.c_str(), buffer.msgID);
+        Broker.processQueue();
+        lastQueueProcess = millis();
     }
-    LOG_MESSAGE("--- End of Buffer ---\n");
 }
-#endif
 
 void startNetworkingInterfaces()
 {
@@ -136,6 +129,7 @@ void enable_WiFi_AP()
     LOG_MESSAGE("AP started!\nAP IP address: %s\n", WiFi.softAPIP().toString().c_str());
 }
 
+#ifdef DEVELOPMENT_BUILD
 void printConnectivityDiagnostics()
 {
     LOG_MESSAGE("\n--- Connectivity Diagnostics ---\n");
@@ -166,3 +160,4 @@ void printFreeMemory()
     size_t freeMem = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     LOG_MESSAGE("Free Memory: %zu Bytes.\n", freeMem);
 }
+#endif

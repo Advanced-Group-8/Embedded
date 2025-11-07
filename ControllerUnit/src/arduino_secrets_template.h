@@ -13,6 +13,8 @@ constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
 constexpr char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 
 // AP WiFi settings
+constexpr uint8_t AP_IP[] = {192, 168, 10, 1};
+constexpr uint8_t AP_SUBNET[] = {255, 255, 255, 0};
 constexpr char AP_WIFI_SSID[] = "YOUR_AP_WIFI_SSID";
 constexpr char AP_WIFI_PASSWORD[] = "YOUR_AP_WIFI_PASSWORD";
 

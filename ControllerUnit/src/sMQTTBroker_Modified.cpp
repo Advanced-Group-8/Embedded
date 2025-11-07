@@ -25,10 +25,6 @@ bool sMQTTBroker_Modified::onEvent(sMQTTEvent *event)
     SMQTT_LOGD("Received Payload:\n%s\n", payload.c_str());
     SMQTT_LOGD("Received Message ID: %u\n", msgID);
 
-#ifdef ENABLE_BUFFER_LOGGING
-    handleMessageBuffer(topic, payload, msgID);
-#endif
-
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     bool isJson = !err;
@@ -36,7 +32,7 @@ bool sMQTTBroker_Modified::onEvent(sMQTTEvent *event)
     {
         SMQTT_LOGD("JSON parse failed: %s\n", err.c_str());
     }
-    else // Check type and dispatch
+    else
     {
         doc["MessageID"] = msgID;
         if (isGpsTopic(topic))
@@ -48,7 +44,6 @@ bool sMQTTBroker_Modified::onEvent(sMQTTEvent *event)
             handleSensorMessage(topic, payload, doc);
         }
     }
-    processQueue();
     return true;
 }
 
@@ -84,12 +79,12 @@ void sMQTTBroker_Modified::handleSensorMessage(const std::string &topic, const s
     addGpsDataAndTimestamp(doc);
     String body;
     body = constructJson(body, topic, payload, doc);
-    if (resendQueue.size() >= MAX_QUEUE)
+    if (messageQueue.size() >= MAX_QUEUE)
     {
-        resendQueue.pop_front();
+        messageQueue.pop_front();
         SMQTT_LOGD("Resend queue full; dropping oldest to enqueue newest\n");
     }
-    resendQueue.push_back(body);
+    messageQueue.push_back(body);
 }
 
 String sMQTTBroker_Modified::constructJson(String &body, const std::string &topic, const std::string &payload, ArduinoJson::JsonDocument &doc)
@@ -153,7 +148,7 @@ bool sMQTTBroker_Modified::postToBackend(const String &body)
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " + String(AZURE_JWT_TOKEN));
-    SMQTT_LOGD("Posting to backend:\n%s\n", body.c_str());
+    SMQTT_LOGD("Posting queued message:\n%s\n", body.c_str());
     int code = http.POST(body);
     if (code > 0)
     {
@@ -168,24 +163,23 @@ bool sMQTTBroker_Modified::postToBackend(const String &body)
 
 void sMQTTBroker_Modified::processQueue()
 {
-    if (!WiFi.isConnected() || resendQueue.empty())
+    if (!WiFi.isConnected() || messageQueue.empty())
         return;
-    SMQTT_LOGD("Processing message queue. %d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
+    SMQTT_LOGD("Processing message queue. %d item(s) in queue.\n", static_cast<int>(messageQueue.size()));
     // Limit number of attempts per call - Considering connection drops, having a larger number here means more of the buffer empties on each send.
     // In effect - The broker handles 15+ clients only when this number is unreasonably high.
-    size_t toSend = min(resendQueue.size(), (size_t)50);
+    size_t toSend = min(messageQueue.size(), (size_t)25);
     for (size_t i = 0; i < toSend; ++i)
     {
-        String body = resendQueue.front();
-        SMQTT_LOGD("Posting queued message:\n%s\n", body.c_str());
+        String body = messageQueue.front();
         if (postToBackend(body))
         {
-            resendQueue.pop_front();
-            SMQTT_LOGD("Post to backend successful!\nCurrently remains: %d item(s) in queue.\n", static_cast<int>(resendQueue.size()));
+            messageQueue.pop_front();
+            SMQTT_LOGD("Post to backend successful!\nCurrently remains: %d item(s) in queue.\n", static_cast<int>(messageQueue.size()));
         }
         else
         {
-            SMQTT_LOGD("Post to backend failed!\n%s\nCurrently remains: %d item(s) in queue.\n", body.c_str(), static_cast<int>(resendQueue.size()));
+            SMQTT_LOGD("Post to backend failed!\n%s\nCurrently remains: %d item(s) in queue.\n", body.c_str(), static_cast<int>(messageQueue.size()));
             break;
         }
     }
@@ -197,19 +191,6 @@ void sMQTTBroker_Modified::resetGPSCoordinates()
     this->lastLon = 0.0;
     this->haveGPS = false;
 }
-
-#ifdef ENABLE_BUFFER_LOGGING
-// Exist for debugging purposes
-void sMQTTBroker_Modified::handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID)
-{
-    if (messageBuffer.size() >= MAX_BUFFER_SIZE)
-    {
-        messageBuffer.pop_front();
-    }
-    messageBuffer.emplace_back(messageEntry{String(topic.c_str()), String(payload.c_str()), msgID});
-    SMQTT_LOGD("New payload buffered:\n%s\n", payload.c_str());
-}
-#endif
 
 uint16_t sMQTTBroker_Modified::getClientCount() const
 {

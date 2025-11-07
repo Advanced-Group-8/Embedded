@@ -17,15 +17,7 @@ public:
     bool onEvent(sMQTTEvent *event) override;
     void resetGPSCoordinates();
     uint16_t getClientCount() const;
-#ifdef ENABLE_BUFFER_LOGGING
-    struct messageEntry
-    {
-        String topic;
-        String payload;
-        uint16_t msgID;
-    };
-    const std::deque<messageEntry> &getMessageBuffer() const { return messageBuffer; }
-#endif
+    void processQueue();
 
 private:
     // Time/NTP
@@ -36,15 +28,9 @@ private:
     long lastTst = 0;
     bool haveGPS = false;
 
-#ifdef ENABLE_BUFFER_LOGGING
-    // Internal message buffer
-    std::deque<messageEntry> messageBuffer;
-    static constexpr size_t MAX_BUFFER_SIZE = 1000;
-#endif
-
     // Simple resend queue for failed backend posts
-    std::deque<String> resendQueue;
-    static constexpr size_t MAX_QUEUE = 5000;
+    std::deque<String> messageQueue;
+    static constexpr size_t MAX_QUEUE = 900; // 850 have been tested and works fine
 
     bool isSensorsTopic(const std::string &topic) const;
     bool isGpsTopic(const std::string &topic) const;
@@ -55,10 +41,6 @@ private:
     void ensureTimeInitialized();
     String currentIsoTimestamp() const;
     bool postToBackend(const String &body);
-    void processQueue();
-#ifdef ENABLE_BUFFER_LOGGING
-    void handleMessageBuffer(const std::string &topic, const std::string &payload, uint16_t msgID);
-#endif
 };
 
 #endif // SMQTTBROKER_USER_H

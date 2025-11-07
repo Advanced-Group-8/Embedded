@@ -49,7 +49,7 @@ public:
 #define TCPServer WiFiServer
 #include <HardwareSerial.h>
 
-#ifdef ENABLE_SMQTT_LOGGING
+#ifdef ENABLE_LOG_MESSAGE
 #define SMQTT_LOGD(...) Serial.printf(__VA_ARGS__)
 #else
 #define SMQTT_LOGD(...) \
