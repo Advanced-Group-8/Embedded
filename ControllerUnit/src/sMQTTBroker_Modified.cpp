@@ -95,7 +95,9 @@ String sMQTTBroker_User::constructJson(String &body, const std::string &topic, c
 {
     JsonDocument out;
     out["id"] = 1;
-    out["deviceId"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
+    // out["deviceId"] = WiFi.getHostname() ? WiFi.getHostname() : WiFi.macAddress().c_str();
+    // out["deviceId"] = "1337"; // Temporary static ID
+    out["deviceId"] = doc["deviceId"].as<String>(); // Temporary static ID
     out["lat"] = lastLat;
     out["lng"] = lastLon;
     out["temperature"] = doc["Temperature"].as<float>();

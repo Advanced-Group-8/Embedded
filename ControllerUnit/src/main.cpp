@@ -64,12 +64,12 @@ void loop()
 #endif
 
     // Periodically clears lat and lon if no GPS updates received
-    static unsigned long lastGpsReset = 0;
-    if (millis() - lastGpsReset >= GPS_CLEAR_INTERVAL)
-    {
-        Broker.resetGPSCoordinates();
-        lastGpsReset = millis();
-    }
+    // static unsigned long lastGpsReset = 0;
+    // if (millis() - lastGpsReset >= GPS_CLEAR_INTERVAL)
+    // {
+    //     Broker.resetGPSCoordinates();
+    //     lastGpsReset = millis();
+    // }
 
     // Print diagnostics info to terminal periodically
     static unsigned long lastDiagPrint = 0;
