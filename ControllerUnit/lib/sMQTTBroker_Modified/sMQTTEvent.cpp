@@ -19,8 +19,8 @@ sMQTTClient *sMQTTRemoveClientEvent::Client()
 sMQTTLostConnectionEvent::sMQTTLostConnectionEvent()
 	: sMQTTEvent(LostConnect_sMQTTEventType) {};
 
-sMQTTPublicClientEvent::sMQTTPublicClientEvent(sMQTTClient *client, const std::string &topic)
-	: sMQTTEvent(Public_sMQTTEventType), _client(client), _topic(topic) {};
+sMQTTPublicClientEvent::sMQTTPublicClientEvent(sMQTTClient *client, const std::string &topic, sMQTTMessage *msgId)
+	: sMQTTEvent(Public_sMQTTEventType), _client(client), _topic(topic), _msgId(msgId) {};
 
 void sMQTTPublicClientEvent::setPayload(const std::string &payload)
 {
@@ -41,6 +41,11 @@ std::string sMQTTPublicClientEvent::Payload()
 {
 	return _payload;
 };
+
+uint16_t sMQTTPublicClientEvent::MsgID() const
+{
+	return _msgId ? _msgId->getMessageId() : 0;
+}
 
 sMQTTSubUnSubClientEvent::sMQTTSubUnSubClientEvent(unsigned char type, sMQTTClient *client, const std::string &topic) : sMQTTEvent(type)
 {

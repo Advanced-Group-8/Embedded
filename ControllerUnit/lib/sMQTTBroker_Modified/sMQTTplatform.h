@@ -48,7 +48,15 @@ public:
 #define TCPClient WiFiClient
 #define TCPServer WiFiServer
 #include <HardwareSerial.h>
+
+#ifdef ENABLE_LOG_MESSAGE
 #define SMQTT_LOGD(...) Serial.printf(__VA_ARGS__)
+#else
+#define SMQTT_LOGD(...) \
+	do                  \
+	{                   \
+	} while (0)
+#endif
 
 #elif defined(WIO_TERMINAL)
 #include <rpcWiFi.h>
